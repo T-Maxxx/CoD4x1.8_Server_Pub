@@ -57,3 +57,6 @@ sys_error.txt
 #T-Max: ignore docs.
 docs/doxygen
 docs/CoD4x_Server.wiki
+
+#T-Max: ignore cmake build dir
+build/

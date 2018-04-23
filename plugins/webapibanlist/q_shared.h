@@ -27,6 +27,7 @@ Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 // A user mod should never modify this file
   #include <math.h>
   #include <stdio.h>
+  #include <wchar.h>
 
 #ifdef _MSC_VER
 /*
@@ -456,7 +457,7 @@ void MakeNormalVectors( const vec3_t forward, vec3_t right, vec3_t up );
 //int	PlaneTypeForNormal (vec3_t normal);
 
 void MatrixMultiply(float in1[3][3], float in2[3][3], float out[3][3]);
-void AngleVectors( const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up);
+void Math_AnglesToVectors( const vec3_t angles, vec3_t forward, vec3_t right, vec3_t up);
 void PerpendicularVector( vec3_t dst, const vec3_t src );
 int Q_isnan( float x );
 
@@ -592,4 +593,13 @@ int QDECL Com_sprintfUni(wchar_t *dest, size_t size, const wchar_t *fmt, ...);
 void Q_strcatUni( wchar_t *dest, int size, const wchar_t *src );
 void CharToHexUni(wchar_t* string, char* hexstring, int size);
 void HexToCharUni(char* hexstring, wchar_t* string, int size);
+
+int	Cmd_Argc( void );
+char	*Cmd_Argv( int arg );
+void	Cmd_ArgvBuffer( int arg, char *buffer, int bufferLength );
+char	*Cmd_Args( void );
+void	Cmd_ArgsBuffer( char *buffer, int bufferLength );
+void Cmd_TokenizeString( const char *text_in );
+
 #endif	// __Q_SHARED_H
+

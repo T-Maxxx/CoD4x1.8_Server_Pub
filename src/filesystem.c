@@ -512,7 +512,7 @@ FS_ReplaceSeparators
 Fix things up differently for win/unix/mac
 ====================
 */
-static void FS_ReplaceSeparators( char *path ) {
+void FS_ReplaceSeparators( char *path ) {
 	char	*s;
 
 	for ( s = path ; *s ; s++ ) {
@@ -534,12 +534,37 @@ void FS_StripTrailingSeperator( char *path ) {
 
 	int len = strlen(path);
 
-	if(path[len -1] == PATH_SEP)
+	if(path[len -1] == '\\' || path[len -1] == '/')
 	{
 		path[len -1] = '\0';
 	}
 }
 
+
+void FS_StripSeperators(char* qpath)
+{
+	int i, y;
+	char newpath[4096];
+	int len = strlen(qpath);
+
+	if(len > sizeof(newpath))
+	{
+		len = sizeof(newpath);
+	}
+
+	for(i = 0, y = 0; i < len; ++i)
+	{
+		if((qpath[i] == '\\' || qpath[i] == '/') && (qpath[i +1] == '\\' || qpath[i +1] == '/'))
+		{
+			continue;
+		}
+		newpath[y] = qpath[i];
+		++y;
+	}
+	newpath[y] = '\0';
+	FS_StripTrailingSeperator( newpath );
+	Q_strncpyz(qpath, newpath, len +1);
+}
 
 
 void FS_BuildOSPathForThread(const char *base, const char *game, const char *qpath, char *fs_path, int fs_thread)
@@ -585,6 +610,7 @@ FS_CreatePath
 Creates any directories needed to store the given filename
 ============
 */
+/* TODO: Not creating nested directories on Windows. */
 qboolean FS_CreatePath (char *OSPath) {
 	char	*ofs;
 
@@ -773,6 +799,8 @@ char* FS_SV_GetFilepath( const char *file, char* testpath, int lenpath )
 
 	return NULL;
 }
+
+
 
 
 /*
@@ -1310,14 +1338,15 @@ long FS_FOpenFileReadDir(const char *filename, searchpath_t *search, fileHandle_
 						fsh[*file].handleFiles.file.z = unzOpen(pak->pakFilename);
 
 						if(fsh[*file].handleFiles.file.z == NULL)
-
+						{
 							Sys_LeaveCriticalSection(CRIT_FILESYSTEM);
-
 							Com_Error(ERR_FATAL, "Couldn't open %s", pak->pakFilename);
+						}
 					}
 					else
+					{
 						fsh[*file].handleFiles.file.z = pak->handle;
-
+					}
 					Q_strncpyz(fsh[*file].name, filename, sizeof(fsh[*file].name));
 					fsh[*file].zipFile = qtrue;
 
@@ -2109,12 +2138,14 @@ int FS_WriteFileOSPath(char *ospath, const void *buffer, int size ) {
 				tries = 1;
 			} else {
 				Com_Printf( "FS_WriteFileOSPath: 0 bytes written\n" );
+				fclose(fh);
 				return 0;
 			}
 		}
 
 		if (written == -1) {
 			Com_Printf( "FS_WriteFileOSPath: -1 bytes written\n" );
+			fclose(fh);
 			return 0;
 		}
 
@@ -2386,12 +2417,14 @@ void FS_SV_HomeCopyFile( char *from, char *to ) {
 
 	if( FS_CreatePath( to_ospath ) ) {
 		Sys_LeaveCriticalSection(CRIT_FILESYSTEM);
+		free(buf);
 		return;
 	}
 
 	f = fopen( to_ospath, "wb" );
 	if ( !f ) {
 		Sys_LeaveCriticalSection(CRIT_FILESYSTEM);
+		free(buf);
 		return;
 	}
 	if (fwrite( buf, 1, len, f ) != len)
@@ -2611,13 +2644,6 @@ void SEH_InitLanguage()
 
 void FS_InitFilesystem()
 {
-  Com_StartupVariable("fs_cdpath");
-  Com_StartupVariable("fs_basepath");
-  Com_StartupVariable("fs_homepath");
-  Com_StartupVariable("fs_game");
-  Com_StartupVariable("fs_copyfiles");
-  Com_StartupVariable("fs_restrict");
-  Com_StartupVariable("loc_language");
   SEH_InitLanguage();
   FS_Startup(BASEGAME);
 //  _Z17SEH_Init_StringEdv();
@@ -2829,132 +2855,147 @@ void FS_DisplayPath( void ) {
 	}
 }
 
-void FS_Startup(const char* gameName)
+void FS_InitCvars()
 {
+    char *homePath;
 
-  char* homePath;
-  cvar_t *levelname;
-  mvabuf;
+	Com_StartupVariable("fs_cdpath");
+	Com_StartupVariable("fs_basepath");
+	Com_StartupVariable("fs_homepath");
+	Com_StartupVariable("fs_game");
+	Com_StartupVariable("fs_copyfiles");
+	Com_StartupVariable("fs_restrict");
+	Com_StartupVariable("loc_language");
 
-  Sys_EnterCriticalSection(CRIT_FILESYSTEM);
+    fs_cdpath = Cvar_RegisterString("fs_cdpath", Sys_DefaultCDPath(), 16, "CD path");
+    fs_basepath = Cvar_RegisterString("fs_basepath", Sys_DefaultInstallPath(), 528, "Base game path");
+    fs_basegame = Cvar_RegisterString("fs_basegame", "", 16, "Base game name");
+    fs_gameDirVar = Cvar_RegisterString("fs_game", "", 28, "Game data directory. Must be \"\" or a sub directory of 'mods/'.");
+    homePath = (char *)Sys_DefaultHomePath();
+    if (!homePath || !homePath[0])
+        homePath = Sys_Cwd();
+    fs_homepath = Cvar_RegisterString("fs_homepath", homePath, 528, "Game home path");
 
-  Com_Printf("----- FS_Startup -----\n");
-  fs_debug = Cvar_RegisterInt("fs_debug", 0, 0, 2, 0, "Enable file system debugging information");
-  fs_copyfiles = Cvar_RegisterBool("fs_copyfiles", 0, 16, "Copy all used files to another location");
-  fs_cdpath = Cvar_RegisterString("fs_cdpath", Sys_DefaultCDPath(), 16, "CD path");
-  fs_basepath = Cvar_RegisterString("fs_basepath", Sys_DefaultInstallPath(), 528, "Base game path");
-  fs_basegame = Cvar_RegisterString("fs_basegame", "", 16, "Base game name");
-  fs_gameDirVar = Cvar_RegisterString("fs_game", "", 28, "Game data directory. Must be \"\" or a sub directory of 'mods/'.");
-  fs_ignoreLocalized = Cvar_RegisterBool("fs_ignoreLocalized", qfalse, 160, "Ignore localized files");
+    FS_SetDirSep(fs_homepath);
+    FS_SetDirSep(fs_basepath);
+    FS_SetDirSep(fs_gameDirVar);
+    FS_GameCheckDir(fs_gameDirVar);
 
-  fs_packFiles = 0;
+    fs_debug = Cvar_RegisterInt("fs_debug", 0, 0, 2, 0, "Enable file system debugging information");
+    fs_copyfiles = Cvar_RegisterBool("fs_copyfiles", 0, 16, "Copy all used files to another location");
+    fs_ignoreLocalized = Cvar_RegisterBool("fs_ignoreLocalized", qfalse, 160, "Ignore localized files");
+    fs_restrict = Cvar_RegisterBool("fs_restrict", qfalse, 16, "Restrict file access for demos etc.");
+    fs_usedevdir = Cvar_RegisterBool("fs_usedevdir", qfalse, 16, "Use development directories.");
 
-  homePath = (char*)Sys_DefaultHomePath();
-  if ( !homePath || !homePath[0] )
-    homePath = fs_basepath->resetString;
-  fs_homepath = Cvar_RegisterString("fs_homepath", homePath, 528, "Game home path");
-  fs_restrict = Cvar_RegisterBool("fs_restrict", qfalse, 16, "Restrict file access for demos etc.");
-  fs_usedevdir = Cvar_RegisterBool("fs_usedevdir", qfalse, 16, "Use development directories.");
+}
 
-  levelname = Cvar_FindVar("mapname");
+void FS_Startup(const char *gameName)
+{
+    cvar_t *levelname;
+    mvabuf;
 
-  FS_SetDirSep(fs_homepath);
-  FS_SetDirSep(fs_basepath);
-  FS_SetDirSep(fs_gameDirVar);
-  FS_GameCheckDir(fs_gameDirVar);
+    Sys_EnterCriticalSection(CRIT_FILESYSTEM);
 
+    Com_Printf("----- FS_Startup -----\n");
 
-  if( fs_basepath->string[0] )
-  {
-    if( fs_usedevdir->string )
+    fs_packFiles = 0;
+
+	FS_InitCvars();
+
+    levelname = Cvar_FindVar("mapname");
+
+    if (fs_basepath->string[0])
     {
-      FS_AddGameDirectory(fs_basepath->string, "devraw_shared");
-      FS_AddGameDirectory(fs_basepath->string, "devraw");
-      FS_AddGameDirectory(fs_basepath->string, "raw_shared");
-      FS_AddGameDirectory(fs_basepath->string, "raw");
+        if (fs_usedevdir->string)
+        {
+            FS_AddGameDirectory(fs_basepath->string, "devraw_shared");
+            FS_AddGameDirectory(fs_basepath->string, "devraw");
+            FS_AddGameDirectory(fs_basepath->string, "raw_shared");
+            FS_AddGameDirectory(fs_basepath->string, "raw");
+        }
+        FS_AddGameDirectory(fs_basepath->string, "players");
     }
-    FS_AddGameDirectory(fs_basepath->string, "players");
-  }
 
-  if ( fs_homepath->string[0] && Q_stricmp(fs_basepath->string, fs_homepath->string) && fs_usedevdir->string)
-  {
-    FS_AddGameDirectory(fs_homepath->string, "devraw_shared");
-    FS_AddGameDirectory(fs_homepath->string, "devraw");
-    FS_AddGameDirectory(fs_homepath->string, "raw_shared");
-    FS_AddGameDirectory(fs_homepath->string, "raw");
-  }
-
-  if ( fs_cdpath->string[0] && Q_stricmp(fs_basepath->string, fs_cdpath->string) )
-  {
-    if ( fs_usedevdir->string )
+    if (fs_homepath->string[0] && Q_stricmp(fs_basepath->string, fs_homepath->string) && fs_usedevdir->string)
     {
-      FS_AddGameDirectory(fs_cdpath->string, "devraw_shared");
-      FS_AddGameDirectory(fs_cdpath->string, "devraw");
-      FS_AddGameDirectory(fs_cdpath->string, "raw_shared");
-      FS_AddGameDirectory(fs_cdpath->string, "raw");
+        FS_AddGameDirectory(fs_homepath->string, "devraw_shared");
+        FS_AddGameDirectory(fs_homepath->string, "devraw");
+        FS_AddGameDirectory(fs_homepath->string, "raw_shared");
+        FS_AddGameDirectory(fs_homepath->string, "raw");
     }
-    FS_AddGameDirectory(fs_cdpath->string, gameName);
-  }
+    /* CDPath set. */
+    if (fs_cdpath->string[0] && Q_stricmp(fs_basepath->string, fs_cdpath->string))
+    {
+        if (fs_usedevdir->string)
+        {
+            FS_AddGameDirectory(fs_cdpath->string, "devraw_shared");
+            FS_AddGameDirectory(fs_cdpath->string, "devraw");
+            FS_AddGameDirectory(fs_cdpath->string, "raw_shared");
+            FS_AddGameDirectory(fs_cdpath->string, "raw");
+        }
+        FS_AddGameDirectory(fs_cdpath->string, gameName);
+    }
+    /* BaseGame set. */
+    if (fs_basepath->string[0])
+    {
+        FS_AddGameDirectory(fs_basepath->string, va("%s_shared", gameName));
+        FS_AddGameDirectory(fs_basepath->string, gameName);
+    }
+    /* BaseGame set and (HomePath not equal to BaseGame). (aka multiple servers on one game). */
+    if (fs_basepath->string[0] && Q_stricmp(fs_homepath->string, fs_basepath->string))
+    {
+        /* Last added fs_homepath directory used for logfiles output? */
+        /* Swap next 2 lines and you will get logfile output to '%s_shared'. Why? */
+        /* What about 'usermaps' directory? Why output still same? */
+        FS_AddGameDirectory(fs_homepath->string, va("%s_shared", gameName));
+        FS_AddGameDirectory(fs_homepath->string, gameName);
+        FS_AddGameDirectory(fs_basepath->string, va("%s_shared", gameName));
+    }
+    /* BaseGame set, fs_game is "main" and BaseGame not equal to "main". WUT? */
+    if (fs_basegame->string[0] && !Q_stricmp(gameName, BASEGAME) && Q_stricmp(fs_basegame->string, gameName))
+    {
+        if (fs_cdpath->string[0])
+            FS_AddGameDirectory(fs_cdpath->string, fs_basegame->string);
+        if (fs_basepath->string[0])
+            FS_AddGameDirectory(fs_basepath->string, fs_basegame->string);
+        if (fs_homepath->string[0] && Q_stricmp(fs_homepath->string, fs_basepath->string))
+            FS_AddGameDirectory(fs_homepath->string, fs_basegame->string);
+    }
 
-  if ( fs_basepath->string[0] )
-  {
-    FS_AddGameDirectory(fs_basepath->string, va("%s_shared", gameName));
-    FS_AddGameDirectory(fs_basepath->string, gameName);
-  }
+    /* Setup usermaps directory. */
+    if (fs_gameDirVar->string[0] && !Q_stricmp(gameName, BASEGAME) && Q_stricmp(fs_gameDirVar->string, gameName) && levelname && levelname->string[0])
+    {
+        if (fs_cdpath->string[0])
+            FS_AddGameDirectory(fs_cdpath->string, va("usermaps/%s", levelname->string));
+        if (fs_basepath->string[0])
+            FS_AddGameDirectory(fs_basepath->string, va("usermaps/%s", levelname->string));
+        if (fs_homepath->string[0] && Q_stricmp(fs_homepath->string, fs_basepath->string))
+            FS_AddGameDirectory(fs_homepath->string, va("usermaps/%s", levelname->string));
+    }
 
-  if ( fs_basepath->string[0] && Q_stricmp(fs_homepath->string, fs_basepath->string) )
-  {
-    FS_AddGameDirectory(fs_basepath->string, va("%s_shared", gameName));
-    FS_AddGameDirectory(fs_homepath->string, gameName);
-  }
+    if (fs_gameDirVar->string[0] && !Q_stricmp(gameName, BASEGAME) && Q_stricmp(fs_gameDirVar->string, gameName))
+    {
+        if (fs_cdpath->string[0])
+            FS_AddGameDirectory(fs_cdpath->string, fs_gameDirVar->string);
+        if (fs_basepath->string[0])
+            FS_AddGameDirectory(fs_basepath->string, fs_gameDirVar->string);
+        if (fs_homepath->string[0] && Q_stricmp(fs_homepath->string, fs_basepath->string))
+            FS_AddGameDirectory(fs_homepath->string, fs_gameDirVar->string);
+    }
 
+    /*  Com_ReadCDKey(); */
+    Cmd_AddCommand("path", FS_Path_f);
+    Cmd_AddCommand("which", FS_Which_f);
+    //Cmd_AddCommand("dir", FS_Dir_f );
+    FS_DisplayPath();
+    /*  Cvar_ClearModified(fs_gameDirVar);*/
+    fs_gameDirVar->modified = 0;
+    Com_Printf("----------------------\n");
+    Com_Printf("%d files in iwd files\n", fs_packFiles);
 
-
-  if ( fs_basegame->string[0] && !Q_stricmp(gameName, BASEGAME) && Q_stricmp(fs_basegame->string, gameName) )
-  {
-    if ( fs_cdpath->string[0] )
-      FS_AddGameDirectory(fs_cdpath->string, fs_basegame->string);
-    if ( fs_basepath->string[0] )
-      FS_AddGameDirectory(fs_basepath->string, fs_basegame->string);
-    if ( fs_homepath->string[0] && Q_stricmp(fs_homepath->string, fs_basepath->string) )
-      FS_AddGameDirectory(fs_homepath->string, fs_basegame->string);
-  }
-
-  if ( fs_gameDirVar->string[0] && !Q_stricmp(gameName, BASEGAME) && Q_stricmp(fs_gameDirVar->string, gameName) && levelname && levelname->string[0])
-  {
-	if ( fs_cdpath->string[0] )
-		FS_AddGameDirectory(fs_cdpath->string, va("usermaps/%s", levelname->string));
-	if ( fs_basepath->string[0] )
-		FS_AddGameDirectory(fs_basepath->string, va("usermaps/%s", levelname->string));
-	if ( fs_homepath->string[0] && Q_stricmp(fs_homepath->string, fs_basepath->string) )
-		FS_AddGameDirectory(fs_homepath->string, va("usermaps/%s", levelname->string));
-  }
-
-  if ( fs_gameDirVar->string[0] && !Q_stricmp(gameName, BASEGAME) && Q_stricmp(fs_gameDirVar->string, gameName) )
-  {
-    if ( fs_cdpath->string[0] )
-      FS_AddGameDirectory(fs_cdpath->string, fs_gameDirVar->string);
-    if ( fs_basepath->string[0] )
-      FS_AddGameDirectory(fs_basepath->string, fs_gameDirVar->string);
-    if ( fs_homepath->string[0] && Q_stricmp(fs_homepath->string, fs_basepath->string) )
-      FS_AddGameDirectory(fs_homepath->string, fs_gameDirVar->string);
-  }
-
-/*  Com_ReadCDKey(); */
-  Cmd_AddCommand("path", FS_Path_f);
-  Cmd_AddCommand("which", FS_Which_f);
-  //Cmd_AddCommand("dir", FS_Dir_f );
-  FS_DisplayPath();
-/*  Cvar_ClearModified(fs_gameDirVar);*/
-  fs_gameDirVar->modified = 0;
-  Com_Printf("----------------------\n");
-  Com_Printf("%d files in iwd files\n", fs_packFiles);
-
-  Sys_LeaveCriticalSection(CRIT_FILESYSTEM);
-
+    Sys_LeaveCriticalSection(CRIT_FILESYSTEM);
 
     PHandler_Event(PLUGINS_ONFSSTARTED, fs_searchpaths);
-
 }
 
 void FS_AddIwdFilesForGameDirectory(const char *path, const char *dir);
@@ -3017,7 +3058,7 @@ void FS_AddGameDirectory_Single(const char *path, const char *dir_nolocal, qbool
     {
       Q_strncpyz(fs_gamedir, dir, 256);
     }
-    search = (searchpath_t *)Z_Malloc(sizeof(searchpath_t));
+    search = (searchpath_t *)S_Malloc(sizeof(searchpath_t));
     search->dir = (directory_t *)Z_Malloc(sizeof(directory_t));
     Q_strncpyz(search->dir->path, path, sizeof(search->dir->path));
     Q_strncpyz(search->dir->gamedir, dir, sizeof(search->dir->gamedir));
@@ -3192,7 +3233,7 @@ void FS_AddIwdFilesForGameDirectory(const char *path, const char *dir)
 
 		Q_strncpyz(pak->pakGamename, dir, sizeof(pak->pakGamename));
 
-		search = (searchpath_t *)Z_Malloc(sizeof(searchpath_t));
+		search = (searchpath_t *)S_Malloc(sizeof(searchpath_t));
 		search->pack = pak;
 		search->localized = islocalized;
 		search->langIndex = langindex;
@@ -3211,7 +3252,8 @@ void FS_AddIwdFilesForGameDirectory(const char *path, const char *dir)
 		search->next = sp;
 		prev->next = search;
 	}
-/*	Sys_FreeFileList(sorted); */
+
+	Sys_FreeFileList(pakfiles);
 }
 
 
@@ -3679,6 +3721,7 @@ void FS_CopyFile( char *fromOSPath, char *toOSPath ) {
 
 	if ( FS_CreatePath( toOSPath ) ) {
 		Sys_LeaveCriticalSection(CRIT_FILESYSTEM);
+		free(buf);
 		return;
 	}
 
@@ -4384,4 +4427,169 @@ int FS_WriteChecksumInfo(const char* filename, byte* data, int maxsize)
     //Slow search did not generate results :/
     return 0;
 
+}
+
+
+/*
+=================
+FS_ReadOSPath
+
+Properly handles partial reads
+=================
+*/
+int FS_ReadOSPath( void *buffer, int len, FILE* f ) {
+	int		block, remaining;
+	int		read;
+	byte	*buf;
+
+	if ( !f ) {
+		return 0;
+	}
+
+	buf = (byte *)buffer;
+
+	remaining = len;
+	while (remaining) {
+		block = remaining;
+		read = fread (buf, 1, block, f);
+		if (read == 0)
+		{
+			return len-remaining;	//Com_Error (ERR_FATAL, "FS_Read: 0 bytes read");
+		}
+
+		if (read == -1) {
+			Com_Error(ERR_FATAL, "FS_ReadOSPath: -1 bytes read");
+		}
+
+		remaining -= read;
+		buf += read;
+	}
+	return len;
+
+}
+
+
+/*
+================
+FS_filelengthOSPath
+
+If this is called on a non-unique FILE (from a pak file),
+it will return the size of the pak file, not the expected
+size of the file.
+================
+*/
+int FS_filelengthOSPath( FILE* h ) {
+	int		pos;
+	int		end;
+
+	pos = ftell (h);
+	fseek (h, 0, SEEK_END);
+	end = ftell (h);
+	fseek (h, pos, SEEK_SET);
+
+	return end;
+}
+
+/*
+===========
+FS_FOpenFileReadOSPathUni
+search for a file somewhere below the home path, base path or cd path
+we search in that order, matching FS_SV_FOpenFileRead order
+===========
+*/
+int FS_FOpenFileReadOSPath( const char *filename, FILE **fp ) {
+	char ospath[MAX_OSPATH];
+	FILE* fh;
+
+	Q_strncpyz( ospath, filename, sizeof( ospath ) );
+
+	fh = fopen( ospath, "rb" );
+
+	if ( !fh ){
+		*fp = NULL;
+		return -1;
+	}
+
+	*fp = fh;
+
+	return FS_filelengthOSPath(fh);
+}
+
+/*
+==============
+FS_FCloseFileOSPath
+
+==============
+*/
+qboolean FS_FCloseFileOSPath( FILE* f ) {
+
+	if (f) {
+	    fclose (f);
+	    return qtrue;
+	}
+	return qfalse;
+}
+
+
+/*
+============
+FS_ReadFileOSPath
+
+Filename are os paths a null buffer will just return the file length without loading
+============
+*/
+int FS_ReadFileOSPath( const char *ospath, void **buffer ) {
+	byte*	buf;
+	int		len;
+	FILE*   h;
+
+
+	if ( !ospath || !ospath[0] ) {
+		Com_Error(ERR_FATAL, "FS_ReadFileOSPath with empty name\n" );
+	}
+
+	buf = NULL;	// quiet compiler warning
+
+	// look for it in the filesystem or pack files
+	len = FS_FOpenFileReadOSPath( ospath, &h );
+	if ( len == -1 ) {
+		if ( buffer ) {
+			*buffer = NULL;
+		}
+		return -1;
+	}
+
+	if ( !buffer ) {
+		FS_FCloseFileOSPath( h );
+		return len;
+	}
+
+	buf = malloc(len+1);
+	if(buf == NULL)
+	{
+		Com_Error(ERR_FATAL, "FS_ReadFileOSPathUni got no memory\n" );
+	}
+	*buffer = buf;
+
+	FS_ReadOSPath (buf, len, h);
+
+	// guarantee that it will have a trailing 0 for string operations
+	buf[len] = 0;
+	FS_FCloseFileOSPath( h );
+	return len;
+}
+
+
+/*
+=============
+FS_FreeFile
+=============
+*/
+void FS_FreeFileOSPath( void *buffer ) {
+
+	if ( !buffer ) {
+		Com_Error( ERR_FATAL, "FS_FreeFile( NULL )" );
+	}
+	//Like regular FS_FreeFile but ignoring FS_LoadStack
+	free( buffer );
 }

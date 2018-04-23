@@ -34,7 +34,9 @@
 #define KEY_MASK_BACK           129
 #define KEY_MASK_MOVELEFT       129
 
+#define KEY_MASK_FIRE           1
 #define KEY_MASK_SPRINT         2
+#define KEY_MASK_MELEE          4
 #define KEY_MASK_RELOAD         16
 #define KEY_MASK_LEANLEFT       64
 #define KEY_MASK_LEANRIGHT      128
@@ -42,9 +44,14 @@
 #define KEY_MASK_CROUCH         512
 #define KEY_MASK_JUMP           1024
 #define KEY_MASK_ADS_MODE       2048
+#define KEY_MASK_TEMP_ACTION    4096
 #define KEY_MASK_HOLDBREATH     8192
+#define KEY_MASK_FRAG           16384
+#define KEY_MASK_SMOKE          32768
 #define KEY_MASK_NIGHTVISION    262144
 #define KEY_MASK_ADS            524288
+#define KEY_MASK_USE            0x28 /* Combination */
+#define BUTTON_ATTACK			KEY_MASK_FIRE
 
 typedef struct{
     int	score; //0x2f78
@@ -120,10 +127,10 @@ typedef struct playerState_s {
 	int		eFlags;  // 176
 	int		eventSequence;  // 180
 
-	int events[4];
-	unsigned int eventParms[4];
+	int events[4];  // 184
+	unsigned int eventParms[4];  // 200
 
-	int		oldEventSequence;
+	int		oldEventSequence;  // 216
 
 	int		clientNum;  // 220
 	int		offHandIndex;  // 224
@@ -295,19 +302,20 @@ typedef struct clientState_s
 #define PICKUP_FORCE    2   // pickup the next item when touched (and reset to PICKUP_ACTIVATE when done)
 
 // usercmd_t is sent to the server each client frame
-typedef struct usercmd_s {
-	int		serverTime;
-	int		buttons;
-	int		angles[3];
-	byte	weapon;
-	byte	offHandIndex;
-	byte	forwardmove;
-	byte	rightmove;
-	float	meleeChargeYaw;
-	byte	meleeChargeDist;
-	byte	pad[3];
+typedef struct usercmd_s
+{
+    int serverTime;
+    int buttons;
+    int angles[3];
+    byte weapon;
+    byte offHandIndex;
+    char forwardmove; /* Must be char, not byte */
+    char rightmove;   /* Must be char, not byte */
+    float meleeChargeYaw;
+    byte meleeChargeDist;
+	byte selectedLocation[2];
+	byte pad;
 } usercmd_t;
-
 
 // client data that stays across multiple respawns, but is cleared
 // on each level change or team change at ClientBegin()

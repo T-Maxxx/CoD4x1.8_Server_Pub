@@ -378,7 +378,7 @@ qboolean FS_FCloseDemoFile( fileHandleData_t *fh ) {
 	if (fh->handleFiles.file.o) {
 	    FS_DemoFlush( fh );
 	    if(fh->writebuffer){
-		Z_Free(fh->writebuffer);
+		L_Free(fh->writebuffer);
 	    }
 	    fclose (fh->handleFiles.file.o);
 	    Com_Memset( fh, 0, sizeof( fileHandleData_t ) );
@@ -386,7 +386,7 @@ qboolean FS_FCloseDemoFile( fileHandleData_t *fh ) {
 	}
 
 	if(fh->writebuffer){
-		Z_Free(fh->writebuffer);
+		L_Free(fh->writebuffer);
 	}
 
 	Com_Memset( fh, 0, sizeof( fileHandleData_t ) );
@@ -429,7 +429,7 @@ qboolean FS_FOpenDemoFileWrite( const char *filename, fileHandleData_t *fh ) {
 	if (!fh->handleFiles.file.o) {
 		return qfalse;
 	}
-	fh->writebuffer = Z_Malloc(FS_DEMOWRITEBUF_SIZE);
+	fh->writebuffer = L_Malloc(FS_DEMOWRITEBUF_SIZE);
 	fh->bufferSize = FS_DEMOWRITEBUF_SIZE;
 	return qtrue;
 }
@@ -491,53 +491,56 @@ FS_DemoFlush
 Writting buffer to file
 =================
 */
-int FS_DemoFlush( fileHandleData_t *fh ) {
-	int	block, remaining;
-	int	written, overallwritten;
-	byte	*buf;
-	int	tries;
-	FILE	*f;
-	const void *buffer = fh->writebuffer;
-	int len = fh->bufferPos;
+int FS_DemoFlush(fileHandleData_t *fh)
+{
+    int block, remaining;
+    int written, overallwritten;
+    byte *buf;
+    int tries;
+    FILE *f;
 
-	if ( !fh ) {
-		return 0;
-	}
+    if (!fh)
+        return 0;
 
-	f = fh->handleFiles.file.o;
-	buf = (byte *)buffer;
+    const void *buffer = fh->writebuffer;
+    int len = fh->bufferPos;
 
-	remaining = len;
-	tries = 0;
-	overallwritten = 0;
-	while (remaining) {
-		block = remaining;
-		written = fwrite (buf, 1, block, f);
-		overallwritten += written;
-		if (written == 0) {
-			if (!tries) {
-				tries = 1;
-			} else {
-				Com_Printf( "FS_DemoFlush: 0 bytes written\n" );
-				return 0;
-			}
-		}
+    f = fh->handleFiles.file.o;
+    buf = (byte *)buffer;
 
-		if (written == -1) {
-			Com_Printf( "FS_DemoFlush: -1 bytes written\n" );
-			return 0;
-		}
+    remaining = len;
+    tries = 0;
+    overallwritten = 0;
+    while (remaining)
+    {
+        block = remaining;
+        written = fwrite(buf, 1, block, f);
+        overallwritten += written;
+        if (written == 0)
+        {
+            if (!tries)
+                tries = 1;
+            else
+            {
+                Com_Printf("FS_DemoFlush: 0 bytes written\n");
+                return 0;
+            }
+        }
 
-		remaining -= written;
-		buf += written;
-	}
+        if (written == -1)
+        {
+            Com_Printf("FS_DemoFlush: -1 bytes written\n");
+            return 0;
+        }
 
-	fh->bufferPos = 0; //Reset the buffer offset to the beginning
+        remaining -= written;
+        buf += written;
+    }
 
-	return overallwritten;
+    fh->bufferPos = 0; //Reset the buffer offset to the beginning
+
+    return overallwritten;
 }
-
-
 
 void FS_DemoForceFlush(fileHandleData_t *fh){
 

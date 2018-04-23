@@ -9,6 +9,8 @@
 #include "msg.h"
 #include "sys_net.h"
 
+#define HTTP_CONNECTTIMEOUT 15000
+
 typedef enum
 {
 	FT_PROTO_HTTP,
@@ -54,6 +56,7 @@ typedef struct
 	int stage;
 	ftprotocols_t protocol;
 	netadr_t remote;
+	qboolean socketReady;
 	#ifndef NO_TLS
 		struct tlsstate_s *tls;
 	#endif

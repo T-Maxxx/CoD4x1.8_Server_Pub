@@ -40,6 +40,7 @@
 #include "sys_thread.h"
 #include "hl2rcon.h"
 #include "sv_auth.h"
+#include "sec_crypto.h"
 
 #include "sapi.h"
 
@@ -47,6 +48,18 @@
 #include <stdint.h>
 #include <stdarg.h>
 #include <string.h>
+
+#ifdef _LAGDEBUG
+#ifdef _WIN32
+
+#define backtrace(buffer, size) 0
+#define backtrace_symbols(buffer, size) 0
+
+#else
+#include <execinfo.h>
+#endif /* ifdef _WIN32 */
+
+#endif /* ifdef _LAGDEBUG */
 
 
 static void SV_CloseDownload( client_t *cl );
@@ -99,11 +112,6 @@ __optimize3 __regparm1 void SV_GetChallenge(netadr_t *from)
 		}
 		if(svse.authorizeAddress.type == NA_IP && from->type == NA_IP && NET_CompareBaseAdr(from, &svse.authorizeAddress))
 		{
-			//Reset the default socket so that this is forwarded to all sockets
-			if(NET_GetDefaultCommunicationSocket() == NULL){
-				NET_RegisterDefaultCommunicationSocket(from);
-				svse.authorizeAddress.sock = from->sock;
-			}
 			from->port = BigShort(PORT_AUTHORIZE);
 			challenge = NET_CookieHash(from);
 			NET_OutOfBandPrint( NS_SERVER, from, "getIpAuthorize %i %s \"\" 0", challenge, NET_AdrToStringShort(from));
@@ -162,9 +170,9 @@ __optimize3 __regparm1 void SV_DirectConnect( netadr_t *from ) {
 	char* xversion;
 
 	xversion = Info_ValueForKey( userinfo, "xver");
-	if(Q_stricmp(xversion, COD4X_SUBVERSION) && version > 6)
+	if(Q_stricmp(xversion, Sys_GetCommonVersionString()) && version > 6)
 	{
-		NET_OutOfBandPrint( NS_SERVER, from, "error\nBad subversion. Server expects subversion %s but client is %s\n", COD4X_SUBVERSION, xversion );
+		NET_OutOfBandPrint( NS_SERVER, from, "error\nBad subversion. Server expects subversion %s but client is %s\n", Sys_GetCommonVersionString(), xversion );
 		return;
 	}
 
@@ -193,11 +201,11 @@ __optimize3 __regparm1 void SV_DirectConnect( netadr_t *from ) {
 				cl->lastConnectTime = svs.time;
 				break;
 /*			}*/
-		}else if ( NET_CompareBaseAdr( from, &cl->netchan.remoteAddress ) && cl->state == CS_CONNECTED){
+		}else if ( NET_CompareBaseAdr( from, &cl->netchan.remoteAddress ) && (cl->state == CS_CONNECTED || cl->state == CS_ZOMBIE)){
 			NET_OutOfBandPrint( NS_SERVER, from,
 				"error\nConnection refused:\nAn uncompleted connection from %s has been detected\nPlease try again later\n",
 				NET_AdrToString(&cl->netchan.remoteAddress));
-			Com_Printf("Rejected connection from %s. This is a Fake-Player-DoS protection\n", NET_AdrToString(&cl->netchan.remoteAddress));
+			Com_DPrintf("Rejected connection from %s. This is a Fake-Player-DoS protection\n", NET_AdrToString(&cl->netchan.remoteAddress));
 			return;
 		}
 	}
@@ -206,8 +214,7 @@ __optimize3 __regparm1 void SV_DirectConnect( netadr_t *from ) {
 	Com_sprintf(ip_str, sizeof(ip_str), "%s", NET_AdrToConnectionString( from ));
 	Info_SetValueForKey( userinfo, "ip", ip_str );
 
-
-	Q_strncpyz(nick, Info_ValueForKey( userinfo, "name" ), 33);
+    ClientCleanName(Info_ValueForKey(userinfo, "name"), nick, 33, false);
 
 	denied[0] = '\0';
 
@@ -229,7 +236,7 @@ __optimize3 __regparm1 void SV_DirectConnect( netadr_t *from ) {
 			if(version < 8)
 			{
 				NET_OutOfBandPrint( NS_SERVER, from, "error\nThis server requires protocol version: %d\n"
-							    "Please install the inofficial cod4x-update you can find at http://cod4x.me\n",
+							    "Please install the unofficial CoD4X-update you can find at http://cod4x.me\n",
 							    sv_protocol->integer);
 			}else{
 #ifdef BETA_RELEASE
@@ -595,14 +602,15 @@ client->receivedstats reset by SV_SpawnServer
 */
 void SV_ReceiveStats_f(client_t* cl, msg_t* msg)
 {
-	int type, size;
+	int type, size, i, k;
+	byte statsbuf[sizeof(cl->stats)];
 	type = MSG_ReadByte(msg);
 	if(type == 0)
 	{
 		cl->receivedstats = 1;
 		return;
 	}
-	if(type != 1)
+	if(type != 1 && type != 2)
 	{
 		return;
 	}
@@ -616,7 +624,44 @@ void SV_ReceiveStats_f(client_t* cl, msg_t* msg)
 		return; //Double requests due to map_rotate?
 		//SV_DropClient(cl, "Received stats although it was not requested from client");
 	}
-	MSG_ReadData(msg, &cl->stats, sizeof(cl->stats));
+	MSG_ReadData(msg, statsbuf, sizeof(statsbuf));
+	if(type != 2)
+	{
+		return;
+		memcpy(&cl->stats, statsbuf, sizeof(cl->stats));
+	}else{
+		//Decrypt stats.
+		/* For OVH Hosting's buggy firewalls making us mad!!!
+		Need to CBC encrypt stats to fool it */
+		symmetric_key skey;
+
+		uint8_t key[16];
+		uint32_t* ikey = (uint32_t*)key;
+		ikey[0] = cl->challenge;
+		ikey[1] = cl->challenge;
+		ikey[2] = cl->challenge;
+		ikey[3] = cl->challenge;
+
+		uint8_t plaintext[16];
+		uint8_t ciphertext[16];
+		uint8_t iv[16] = {0x4f, 0x11, 0x62, 0xeb, 0x44, 0x61, 0x99, 0x66, 0xa4, 0xcf, 0x41, 0x73, 0x99, 0x12, 0x55, 0xb9};
+		memcpy(ciphertext, iv, sizeof(ciphertext));
+
+		rijndael_setup(key, 16, 0, &skey);
+		for(i = 0; i < sizeof(cl->stats)/16; ++i)
+		{
+			memcpy(ciphertext, statsbuf + 16*i, sizeof(ciphertext));
+			rijndael_ecb_decrypt(ciphertext, plaintext, &skey);
+
+			for(k = 0; k < 16; ++k) //Cipher Block Chaining Mode
+			{
+				plaintext[k] ^= iv[k];
+			}
+			memcpy(iv, ciphertext, sizeof(iv));
+			memcpy(((uint8_t*)&cl->stats) + 16*i, plaintext, sizeof(plaintext));
+		}
+		rijndael_done(&skey);
+	}
 	Com_Printf("Received packet %i of stats data\n", 0);
 	cl->receivedstats = 1;
 }
@@ -1015,10 +1060,10 @@ __optimize3 __regparm3 void SV_UserMove( client_t *cl, msg_t *msg, qboolean delt
 		oldcmd = cmd;
 	}
 
-	cl->unknownUsercmd1 = MSG_ReadLong(msg);
-	cl->unknownUsercmd2 = MSG_ReadLong(msg);
-	cl->unknownUsercmd3 = MSG_ReadLong(msg);
-	cl->unknownUsercmd4 = MSG_ReadLong(msg);
+	*((uint32_t*)&cl->predictedOrigin[0]) = MSG_ReadLong(msg);
+	*((uint32_t*)&cl->predictedOrigin[1]) = MSG_ReadLong(msg);
+	*((uint32_t*)&cl->predictedOrigin[2]) = MSG_ReadLong(msg);
+	cl->predictedOriginServerTime = MSG_ReadLong(msg);
 
 
 	// TTimo
@@ -1091,19 +1136,19 @@ void SV_ClientCalcFramerate()
 		elapsed = 1;
 	}
 
-	int calcfactor = ((1000 << 8) / (elapsed << 8));
-
-	for(i = 0, cl = svs.clients; i < sv_maxclients->integer; ++i, ++cl)
+	if(elapsed > 1000)
 	{
-		if(cl->state == CS_ACTIVE)
+		for(i = 0, cl = svs.clients; i < sv_maxclients->integer; ++i, ++cl)
 		{
-			cl->clFPS = cl->clFrames * calcfactor;
-		}else{
-			cl->clFPS = 0;
+			if(cl->state == CS_ACTIVE)
+				cl->clFPS = (float)cl->clFrames * 1000.0f / elapsed;
+			else
+				cl->clFPS = 0;
+			
+			cl->clFrames = 0;
 		}
-		cl->clFrames = 0;
+		oldtime = now;
 	}
-	oldtime = now;
 }
 
 /*
@@ -1155,15 +1200,8 @@ void SV_ClientEnterWorld( client_t *client, usercmd_t *cmd ) {
 
 	SV_SApiSteamIDToString(client->steamid, psti, sizeof(psti));
 
-	if(client->demorecording)
-	{
-		if(client->demofile.handleFiles.file.o)
-		{
-			SV_StopRecord(client); //Should never happen but who knows
-		}
-		client->demorecording = qfalse;
-		SV_RecordClient(client, client->demoName); //Write ther next demo of client
-	}
+	//It was never intended to make a new demo for each fast_restart.
+	//SV_SpawnServer() stops the demo and cleans the name which did not happen here which resulted in strange naming bug
 
 	if(sv_autodemorecord->boolean && !client->demorecording && (client->netchan.remoteAddress.type == NA_IP || client->netchan.remoteAddress.type == NA_IP6))
 	{
@@ -1310,9 +1348,9 @@ gentity_t* SV_AddBotClient(){
 
 	Q_strncpyz(cl->name, name, sizeof(cl->name));
 	Q_strncpyz(cl->shortname, name, sizeof(cl->shortname));
-/*
-	ClientSetUsername(i, name);
-*/
+
+	/* ClientSetUsername(i, name); */
+
 	SV_UpdateClientConfigInfo(cl);
 
 	// when we receive the first packet from the client, we will
@@ -1569,7 +1607,17 @@ __cdecl void SV_WriteDownloadToClient( client_t *cl ) {
 	SV_SendReliableServerCommand(cl, &msg);
 }
 
+#ifdef _LAGDEBUG
 
+//Hit counter
+typedef struct
+{
+	unsigned int lastcleared;
+	int hitcount;
+}dbghitcounter_t;
+dbghitcounter_t hitcounter[64]; //ALL Clients
+
+#endif
 /*
 ================
 SV_SendClientGameState
@@ -1588,6 +1636,39 @@ void SV_SendClientGameState( client_t *client ) {
 	char banrejectmsg[1024];
 	uint64_t playerid;
 	uint64_t steamid;
+
+#ifdef _LAGDEBUG
+
+	dbghitcounter_t *dbgc = &hitcounter[client - svs.clients];
+	unsigned int time = Sys_Milliseconds();
+	if(dbgc->lastcleared + 300 < time)
+	{
+		dbgc->lastcleared = time;
+		if(dbgc->hitcount > 80)
+		{
+			Com_DPrintfLogfile("Hitcount exceeded 80 in SV_SendClientGameState for client %d Count %d\n", client - svs.clients, dbgc->hitcount);
+			void** traces;
+			char** symbols;
+			int numFrames;
+			int i;
+
+			Com_DPrintfLogfile("---------- Begin Backtrace ----------\n");
+			traces = malloc(65536*sizeof(void*));
+			numFrames = backtrace(traces, 65536);
+			symbols = backtrace_symbols(traces, numFrames);
+			for(i = 0; i < numFrames; i++)
+				Com_DPrintfLogfile("%5d: %s\n", numFrames - i -1, symbols[i]);
+			free(traces);
+#ifdef _WIN32
+            Com_DPrintfLogfile("Backtrace is not supported for Windows\n");
+#endif
+            Com_DPrintfLogfile("-------- Backtrace Completed --------\n");
+		}
+		dbgc->hitcount = 0;
+	}
+	dbgc->hitcount++;
+
+#endif
 
 	if(client->needupdate)
 	{
@@ -2525,7 +2606,7 @@ void SV_RelocateReliableMessageProtocolBuffer(msg_t* msg, int newsize)
 	{
 		newsize = msg->cursize;
 	}
-	newbuffer = Z_Malloc(newsize);
+	newbuffer = L_Malloc(newsize);
 
 	if(newbuffer == NULL)
 	{
@@ -2534,7 +2615,7 @@ void SV_RelocateReliableMessageProtocolBuffer(msg_t* msg, int newsize)
 	if(msg->data != NULL)
 	{
 		memcpy(newbuffer, msg->data, msg->cursize);
-		Z_Free(msg->data);
+		L_Free(msg->data);
 	}
 	msg->data = newbuffer;
 	msg->maxsize = newsize;
@@ -2563,7 +2644,6 @@ void SV_ExecuteReliableMessage(client_t* client)
 			break;
 		case 0x35448:
 			SV_SApiProcessModules(client, msg);
-			//asdftest();
 			break;
 		default:
 			Com_PrintWarning("Unknown clientcommand: %d\n", command);
@@ -2648,14 +2728,14 @@ qboolean SV_SetupReliableMessageProtocol(client_t* client)
     int size;
 
     size = RNET_DEFAULT_BUFFER_SIZE;
-    defaultbuffer = Z_Malloc(size);
+    defaultbuffer = L_Malloc(size);
 
     if(client->netchan.remoteAddress.type == NA_BAD)
     {
         Com_Error(ERR_FATAL, "SV_SetupRelibiableMessageProtocol() called without setting up netchan");
     }
 
-    client->reliablemsg.netstate = ReliableMessageSetup(client->netchan.sock, client->netchan.qport, &client->netchan.remoteAddress);
+    client->reliablemsg.netstate = ReliableMessageSetup(client->netchan.qport, client->netchan.sock, &client->netchan.remoteAddress);
 
     if(defaultbuffer == NULL)
     {
@@ -2676,7 +2756,7 @@ void SV_DisconnectReliableMessageProtocol(client_t* client)
 	ReliableMessageDisconnect(client->reliablemsg.netstate);
 	if(client->reliablemsg.recvbuffer.data)
 	{
-		Z_Free(client->reliablemsg.recvbuffer.data);
+		L_Free(client->reliablemsg.recvbuffer.data);
 	}
 	client->reliablemsg.recvbuffer.data = NULL;
 	client->reliablemsg.recvbuffer.cursize = 0;
@@ -2753,4 +2833,16 @@ int SV_GetClientStat(int clientNum, signed int index)
 
 	return 0;
   }
+}
+
+
+
+
+int SV_GetPredirectedOriginAndTimeForClientNum(int clientNum, float *origin)
+{
+	client_t* client = &svs.clients[clientNum];
+	origin[0] = client->predictedOrigin[0];
+	origin[1] = client->predictedOrigin[1];
+	origin[2] = client->predictedOrigin[2];	
+	return client->predictedOriginServerTime;
 }

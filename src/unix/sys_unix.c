@@ -109,9 +109,15 @@ void Sys_ReplaceProcess( char *cmdline )
 Sys_Dirname
 ==================
 */
-const char *Sys_Dirname( char *path )
+/* Not changes passed path. */
+const char *Sys_Dirname(const char *path)
 {
-	return dirname( path );
+	char dir[MAX_OSPATH] = {'\0'};
+	mvabuf;
+
+	strncpy(dir, path, MAX_OSPATH);
+	dirname(dir);
+	return va("%s", dir);
 }
 
 
@@ -353,7 +359,7 @@ char **Sys_ListFiles( const char *directory, const char *extension, char *filter
 		return NULL;
 	}
 
-	listCopy = Z_Malloc( ( nfiles + 1 ) * sizeof( *listCopy ) );
+	listCopy = S_Malloc( ( nfiles + 1 ) * sizeof( *listCopy ) );
 	for ( i = 0 ; i < nfiles ; i++ ) {
 		listCopy[i] = list[i];
 	}
@@ -459,7 +465,14 @@ int main(int argc, char* argv[])
     }
 
     Sys_SetExeFile( argv[ 0 ] );
-    /* This function modifies argv[ 0 ] :S */
+	const char* find = strrchr( argv[0], '/' );
+    if(find)
+	{
+		Sys_SetExeFileShort( find +1 );
+	}else{
+		Sys_SetExeFileShort( argv[0] );
+	}
+	/* This function modifies argv[ 0 ] :S */
     Sys_SetBinaryPath( Sys_Dirname( argv[ 0 ] ) );
 
     return Sys_Main(commandLine);
@@ -549,6 +562,17 @@ void Sys_WaitForErrorConfirmation(const char* error)
 }
 
 void* currentLibHandle = NULL;
+
+void Sys_LoadLibraryError(char* errormessage, int maxlen)
+{
+	const char* pterror = dlerror();
+	if(pterror == NULL)
+	{
+		Q_strncpyz(errormessage, "no error occurred while loading shared library", maxlen);
+		return;
+	}
+	Q_strncpyz(errormessage, pterror, maxlen);
+}
 
 void* Sys_LoadLibrary(const char* dlfile)
 {
@@ -730,3 +754,4 @@ void Sys_DoStartProcess( char *cmdline ) {
 	}
 
 }
+

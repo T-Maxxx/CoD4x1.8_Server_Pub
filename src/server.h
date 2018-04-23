@@ -36,6 +36,7 @@
 #include "sys_cod4defs.h"
 #include "cvar.h"
 #include "net_game_conf.h"
+#include "cm_public.h"
 
 #include "net_reliabletransport.h"
 
@@ -49,6 +50,9 @@
 
 #define SERVERHEADER_STRUCT_ADDR 0x13f18f80
 #define svsHeader (*((svsHeader_t*)(SERVERHEADER_STRUCT_ADDR)))
+
+#define CM_WORLD_STRUCT_ADDR 0x889efa0
+#define cm_world (*((struct cm_world_t*)(CM_WORLD_STRUCT_ADDR)))
 
 
 // MAX_CHALLENGES is made large to prevent a denial
@@ -193,10 +197,8 @@ typedef struct client_s {//90b4f8c
 	byte		free[420];
 
 	int 		configDataAcknowledge; //New: to determine which config data updates the client has not yet received
-	int			unknownUsercmd1;	//0x63c
-	int			unknownUsercmd2;	//0x640
-	int			unknownUsercmd3;	//0x644
-	int			unknownUsercmd4;	//0x648
+	vec3_t		predictedOrigin;	//0x63c
+	int			predictedOriginServerTime;	//0x640
 
 	const char*		delayDropMsg;		//0x64c
 	char			userinfo[MAX_INFO_STRING];		// name, etc (0x650)
@@ -280,7 +282,7 @@ typedef struct {
 */
 
 #define	MAX_STREAM_SERVERS	6
-#define	MAX_MASTER_SERVERS	8	// max recipients for heartbeat packets
+#define	MAX_MASTER_SERVERS	2	// max recipients for heartbeat packets
 // this structure will be cleared only when the game dll changes
 
 
@@ -541,7 +543,7 @@ typedef struct{//13F18F80
 	int num_entities;
 	int maxClients;
 	int fps;
-	qboolean canArchiveData;
+	qboolean clientArchive;
 	gentity_t *gentities;
 	int gentitySize;
 	clientState_t *gclientstate;
@@ -557,6 +559,60 @@ typedef struct
   int numSnapshotEntities;
   int snapshotEntities[MAX_SNAPSHOT_ENTITIES];
 }snapshotEntityNumbers_t;
+
+
+
+typedef struct
+{
+  const float *mins;
+  const float *maxs;
+  int *list;
+  int count;
+  int maxcount;
+  int contentmask;
+}areaParms_t;
+
+/* 7561 */
+struct worldContents_s
+{
+  int contentsStaticModels;
+  int contentsEntities;
+  int linkcontentsEntities;
+  uint16_t entities;
+  uint16_t staticModels;
+};
+
+/* 7563 */
+struct worldTree_s
+{
+  float dist;
+  uint16_t axis;
+  union
+  {
+	uint16_t parent;
+	uint16_t nextFree;
+  };
+  uint16_t child[2];
+};
+
+/* 7564 */
+struct worldSector_s
+{
+  struct worldContents_s contents;
+  struct worldTree_s tree;
+};
+
+/* 7565 */
+struct cm_world_t
+{
+  float mins[3];
+  float maxs[3];
+  uint16_t freeHead;
+  uint16_t gap;
+  struct worldSector_s sectors[1024];
+};
+
+
 
 
 typedef struct
@@ -589,6 +645,7 @@ gentity_t *SV_GentityNum( int num );
 playerState_t *SV_GameClientNum( int num );
 svEntity_t  *SV_SvEntityForGentity( gentity_t *gEnt );
 gentity_t *SV_GEntityForSvEntity( svEntity_t *svEnt );
+int __cdecl SV_SetBrushModel(gentity_t* Entity_);
 
 //
 // sv_client.c
@@ -732,6 +789,8 @@ void SV_RemoteCmdListAdmins( void );
 __cdecl qboolean SV_GameCommand(void);
 
 void SV_GetConfigstring( int index, char *buffer, int bufferSize );
+int SV_GetConfigstringIndex(int num);
+int SV_GetModelConfigstringIndex(int num);
 
 extern cvar_t* sv_rconPassword;
 extern cvar_t* sv_protocol;
@@ -771,6 +830,7 @@ extern cvar_t* sv_hostname;
 extern cvar_t* sv_shownet;
 extern cvar_t* sv_legacymode;
 extern cvar_t* sv_steamgroup;
+extern cvar_t* sv_disableChat;
 
 void __cdecl SV_StringUsage_f(void);
 void __cdecl SV_ScriptUsage_f(void);
@@ -782,6 +842,9 @@ void __cdecl SV_SetGametype( void );
 void __cdecl SV_InitCvars( void );
 void __cdecl SV_RestartGameProgs( int savepersist );
 void __cdecl SV_ResetSekeletonCache(void);
+void SV_BotInitBotLib( void );
+int SV_BotLibSetup( void );
+int SV_BotLoadMap(const char* levelname);
 void __cdecl SV_PreFrame(void);
 void __cdecl SV_SendClientMessages(void);
 void __cdecl SV_SetServerStaticHeader(void);
@@ -834,6 +897,11 @@ __cdecl void SV_ClipMoveToEntity(struct moveclip_s *clip, svEntity_t *entity, st
 void SV_Cmd_Init();
 void SV_CopyCvars();
 void SV_SteamData(client_t* cl, msg_t* msg);
+void __cdecl SV_Trace(trace_t *results, const float *start, const float *mins, const float *maxs, const float *end, IgnoreEntParams *ignoreEntParams, int contentmask, int locational, char *priorityMap, int staticmodels); //0817D9F8
+void SV_ClipToEntity( trace_t *trace, const vec3_t start, const vec3_t mins, const vec3_t maxs, const vec3_t end, int entityNum, int contentmask, int capsule );
+void G_TraceCapsule(trace_t *results, const float *start, const float *mins, const float *maxs, const float *end, int passEntityNum, int contentmask);
+int SV_PointContents( const vec3_t p, int passEntityNum, int contentmask );
+qboolean SV_inPVSIgnorePortals( const vec3_t p1, const vec3_t p2 );
 
 qboolean SV_SetupReliableMessageProtocol(client_t* client);
 void SV_DisconnectReliableMessageProtocol(client_t* client);
@@ -850,6 +918,9 @@ void SV_ScreenshotArrived(client_t* cl, const char* filename);
 void SV_ModuleArrived(client_t* cl, const char* filename, long checksum);
 void SV_AddBanForSteamIDGUID(uint64_t id, const char* guid, const char* name, int bantime, const char* banreason);
 void SV_ClientCalcFramerate();
+int SV_GetPredirectedOriginAndTimeForClientNum(int clientNum, float *origin);
+void SV_SetMapCenterInSVSHeader(float* center);
+void SV_GetMapCenterFromSVSHeader(float* center);
 
 #ifdef COD4X18UPDATE
 void SV_ConnectWithUpdateProxy(client_t *cl);

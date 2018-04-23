@@ -150,6 +150,7 @@ char* Cvar_InfoString_IW_Wrapper(int dummy, int bit);
 char* Cvar_InfoString_Big(int bit, char*, int);
 void Cvar_ForEach(void (*callback)(cvar_t const*, void* passedhere), void* passback);
 char* Cvar_DisplayableValue(cvar_t const*);
+char* Cvar_DisplayableValueMT( cvar_t const *var, char* value, int maxlen);
 char* Cvar_GetVariantString(const char* name);
 cvar_t* Cvar_FindMalleableVar(const char* name);
 void Cvar_Init(void);
@@ -176,6 +177,7 @@ void Cvar_WriteVariables(fileHandle_t fh);
 void Cvar_SetLatched(const char* name, const char* value);
 void Cvar_ClearFlagsForEach(unsigned short flags);
 void Cvar_ClearModified(cvar_t* cvar);
+qboolean Cvar_IsDefined(const char* varname);
 #define Cvar_GetInt Cvar_VariableIntegerValue
 #define Cvar_GetFloat Cvar_VariableValue
 #define Cvar_GetBool Cvar_VariableBooleanValue

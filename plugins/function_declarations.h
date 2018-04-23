@@ -177,6 +177,7 @@
     __cdecl void Plugin_BoldPrintf(int slot, const char *fmt, ...);          // Print to the player's screen (-1 for all)
     __cdecl char *Plugin_GetPlayerName(int slot);                            // Get a name of a player
     __cdecl void Plugin_AddCommand(char *name, xcommand_t command, int defaultpower); // Add a server command
+    __cdecl void Plugin_RemoveCommand(char *name); //Removes a command. Works also with non plugin added commands.
     __cdecl void Plugin_AddCommandForClientToWhitelist(int clnum, const char* cmd); //Use this function to allow the player clnum to execute it whatever his powerpoints are
     __cdecl void *Plugin_Malloc(size_t size);                                // Same as stdlib.h function malloc
     __cdecl void Plugin_Free(void *ptr);                                     // Same as stdlib.h function free
@@ -230,10 +231,10 @@
     __cdecl void Plugin_RandomBytes( byte *string, int len );
 
     //      == Scriptfunctions ==
-    __cdecl void Plugin_ScrAddFunction(char *name, void (*function)());
-    __cdecl void Plugin_ScrAddMethod(char *name, void (*function)(scr_entref_t object));
-    __cdecl void Plugin_ScrReplaceFunction(char *name, xfunction_t function);
-    __cdecl void Plugin_ScrReplaceMethod(char *name, xfunction_t function);
+    __cdecl void Plugin_ScrAddFunction(const char *name, void (*function)());
+    __cdecl void Plugin_ScrAddMethod(const char *name, void (*function)(scr_entref_t object));
+    __cdecl void Plugin_ScrReplaceFunction(const char *name, xfunction_t function);
+    __cdecl void Plugin_ScrReplaceMethod(const char *name, xfunction_t function);
 
     __cdecl void Plugin_Scr_AddEntity(gentity_t* ent);
     __cdecl int Plugin_Scr_GetNumParam( void );
@@ -255,7 +256,7 @@
     __cdecl void Plugin_Scr_AddVector( vec3_t vec );
     __cdecl void Plugin_Scr_AddArray( void );
     __cdecl void Plugin_Scr_MakeArray( void );
-    __cdecl void Plugin_Scr_MakeArrayKey( int strIdx );
+    __cdecl void Plugin_Scr_AddArrayKey( int strIdx );
     __cdecl short Plugin_Scr_ExecEntThread( gentity_t* ent, int callbackHook, unsigned int numArgs);
     __cdecl short Plugin_Scr_ExecThread( int callbackHook, unsigned int numArgs);
     __cdecl void Plugin_Scr_FreeThread( short threadId);
@@ -273,7 +274,7 @@
 
     __cdecl gentity_t* Plugin_GetGentityForEntityNum(int entnum);
     __cdecl client_t* Plugin_GetClientForClientNum(int clientnum);
-
+	__cdecl int Plugin_ClientToSlot(client_t *client); //Returns Slot number on client_t argument
     __cdecl const char* Plugin_SL_ConvertToString(int index);
 
     __cdecl void Plugin_SV_SetConfigstring(int index, const char *text);
@@ -281,7 +282,7 @@
 
     /* If someone called a command the following functions return data about who invoked it */
     __cdecl int Plugin_Cmd_GetInvokerSlot();                              //clientnum of commandinvoker. -1 if undefined
-    __cdecl int Plugin_Cmd_GetInvokerUID();                              //UID of commandinvoker. 0 if undefined
+    __cdecl int Plugin_Cmd_GetInvokerUID();                              //UID of commandinvoker. 0 if undefined . Deprecated in COD4x18 Do not Use this !
     __cdecl int Plugin_Cmd_GetInvokerClnum();                            //Client slot number of invoker. -1 if undefined
     __cdecl int Plugin_Cmd_GetInvokerPower();                            //Power points of command invoker. 100 if undefined or have all permissions
     __cdecl uint64_t Plugin_Cmd_GetInvokerSteamID();                     //Steam ID of invoker. 0 if undefined
@@ -306,9 +307,12 @@
     __cdecl const char* Plugin_WriteBanTimelimit(int timeleftsecs, char *outbuffer, int outbufferlen); //Function to turn the remaining ban time into a text
 
     __cdecl ftRequest_t* Plugin_HTTP_Request(const char* url, const char* method, byte* requestpayload, int payloadlen, const char* additionalheaderlines);
-    __cdecl int Plugin_HTTP_SendReceiveData(ftRequest_t* request);
     __cdecl ftRequest_t* Plugin_HTTP_GET(const char* url); /* blocking */
     __cdecl void Plugin_HTTP_FreeObj(ftRequest_t* request);
+
+    __cdecl ftRequest_t* Plugin_HTTP_MakeHttpRequest(const char* url, const char* method, byte* requestpayload, int payloadlen, const char* additionalheaderlines);
+    __cdecl int Plugin_HTTP_SendReceiveData(ftRequest_t* request);
+    
 
     __cdecl void Plugin_HTTP_CreateString_x_www_form_urlencoded(char* outencodedstring, int len, const char* key, const char *value);
     __cdecl void Plugin_HTTP_ParseFormDataBody(const char* body, httpPostVals_t* values);
@@ -355,3 +359,5 @@
     __cdecl void Plugin_DisableThreadDebug();                                   //Disables debug info printing
     __cdecl void Plugin_SleepSec(int sec);
     __cdecl void Plugin_SleepMSec(int msec);
+    __cdecl void Plugin_SetStat(int clientNum, signed int index, int value);
+    __cdecl int Plugin_GetStat(int clientNum, signed int index);

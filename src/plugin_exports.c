@@ -140,10 +140,10 @@ P_P_F void Plugin_AddCommand(char *name, xcommand_t xcommand, int power)
 
 
 }
-#if 0
+
 P_P_F void Plugin_RemoveCommand(char *name)
 {
-    int i;
+//    int i;
     volatile int pID;
     pID = PHandler_CallerID();
     if(pID>=MAX_PLUGINS){
@@ -158,15 +158,15 @@ P_P_F void Plugin_RemoveCommand(char *name)
     }
     Com_DPrintf("Remove a plugin command for plugin %d, command name: %s.\n",pID,name);
     Cmd_RemoveCommand( name );
-  /*  for(i=0; i < )
+
+  /* Leaving the command in list. Is not that good but will not make much trouble.
+  for(i=0; i < )
     pluginFunctions.plugins[pID].cmd[pluginFunctions.plugins[pID].cmds].xcommand = xcommand;
     strcpy(pluginFunctions.plugins[pID].cmd[pluginFunctions.plugins[pID].cmds++].name,name);
     */Com_DPrintf("Command removed.\n");
    // pluginFunctions.plugins[pID].
-
-
 }
-#endif
+
 
 P_P_F qboolean Plugin_TcpConnectMT( int pID, int connection, const char* remote)
 {
@@ -298,6 +298,11 @@ P_P_F qboolean Plugin_UdpSendData(netadr_t* to, void* data, int len)
         Com_PrintError("Plugin_UdpSendData: First argument can not be a NULL-Pointer for plugin ID: #%d\n", pID);
         return qfalse;
     }
+
+    netadr_t* defif;
+    defif = NET_GetDefaultCommunicationSocket(to->type);
+    to->sock = defif ? defif->sock : 0;
+
     return Sys_SendPacket( len, data, to);
 }
 
@@ -664,6 +669,35 @@ P_P_F int Plugin_HTTP_SendReceiveData(ftRequest_t* request)
   return HTTP_SendReceiveData(request);
 }
 
+P_P_F ftRequest_t* Plugin_HTTP_MakeHttpRequest(const char* url, const char* method, byte* requestpayload, int payloadlen, const char* additionalheaderlines)
+{
+  ftRequest_t* curfileobj;
+  msg_t msgdata;
+  msg_t *msg;
+
+  if(method == NULL)
+  {
+      method = "GET";
+  }
+
+  if(requestpayload == NULL || payloadlen < 1)
+  {
+    msg = NULL;
+  }else{
+    MSG_InitReadOnly(&msgdata, requestpayload, payloadlen );
+    msg = &msgdata;
+  }
+
+  curfileobj = HTTPRequest(url, method, msg, additionalheaderlines);
+
+  if(curfileobj == NULL)
+  {
+    Com_Printf("Couldn't connect to server.\n");
+    return qfalse;
+  }
+
+  return curfileobj;
+}
 
 /* blocking */
 P_P_F ftRequest_t* Plugin_HTTP_Request(const char* url, const char* method, byte* requestpayload, int payloadlen, const char* additionalheaderlines)
@@ -687,6 +721,7 @@ P_P_F ftRequest_t* Plugin_HTTP_Request(const char* url, const char* method, byte
   }
 
   curfileobj = HTTPRequest(url, method, msg, additionalheaderlines);
+
   if(curfileobj == NULL)
   {
     Com_Printf("Couldn't connect to server.\n");

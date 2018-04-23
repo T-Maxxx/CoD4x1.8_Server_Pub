@@ -804,47 +804,51 @@ Info_SetValueForKey
 Changes or adds a key/value pair
 ==================
 */
-void BigInfo_SetValueForKey( char *s, const char *key, const char *value ) {
-	char	newi[BIG_INFO_STRING];
+void BigInfo_SetValueForKey(char *s, const char *key, const char *value)
+{
+    char newi[BIG_INFO_STRING];
+    if (!s || !key || !value)
+        return;
 
-	if ( strlen( s ) >= BIG_INFO_STRING ) {
-		Com_Printf(  "Error: Info_SetValueForKey: oversize infostring" );
-	}
+    if (strlen(s) >= BIG_INFO_STRING)
+    {
+        Com_Printf("Error: BigInfo_SetValueForKey: oversize infostring");
+        return;
+    }
 
-	if (strchr (key, '\\') || strchr (value, '\\'))
-	{
-		Com_Printf("Error: Can't use keys or values with a \\\n");
-		return;
-	}
+    if (strchr(key, '\\') || strchr(value, '\\'))
+    {
+        Com_Printf("Error: Can't use keys or values with a \\\n");
+        return;
+    }
 
-	if (strchr (key, ';') || strchr (value, ';'))
-	{
-		Com_Printf("Error: Can't use keys or values with a semicolon\n");
-		return;
-	}
+    if (strchr(key, ';') || strchr(value, ';'))
+    {
+        Com_Printf("Error: Can't use keys or values with a semicolon\n");
+        return;
+    }
 
-	if (strchr (key, '\"') || strchr (value, '\"'))
-	{
-		Com_Printf("Error: Can't use keys or values with a \"\n");
-		return;
-	}
+    if (strchr(key, '\"') || strchr(value, '\"'))
+    {
+        Com_Printf("Error: Can't use keys or values with a \"\n");
+        return;
+    }
 
-	BigInfo_RemoveKey (s, key);
-	if (!value || !strlen(value))
-		return;
+    BigInfo_RemoveKey(s, key);
+    if (value[0] == '\0')
+        return;
 
-	Com_sprintf (newi, sizeof(newi), "\\%s\\%s", key, value);
+    Com_sprintf(newi, sizeof(newi), "\\%s\\%s", key, value);
 
-	if (strlen(newi) + strlen(s) > BIG_INFO_STRING)
-	{
-		Com_Printf( "Error: Info string length exceeded\n");
-		return;
-	}
+    if (strlen(newi) + strlen(s) > BIG_INFO_STRING)
+    {
+        Com_Printf("Error: Info string length exceeded\n");
+        return;
+    }
 
-	strcat (newi, s);
-	strcpy (s, newi);
+    strcat(newi, s);
+    strcpy(s, newi);
 }
-
 
 void Info_Print( const char *s ) {
 	char	key[BIG_INFO_KEY];
@@ -1704,4 +1708,54 @@ int Q_strLF2CRLF(const char* input, char* output, int outputlimit )
 	}
 	output[y] = 0;
 	return y;
+}
+
+
+
+int COM_Compress( char *data_p ) {
+	char *datai, *datao;
+	int c, size;
+	qboolean ws = qfalse;
+
+	size = 0;
+	datai = datao = data_p;
+	if ( datai ) {
+		while ( ( c = *datai ) != 0 ) {
+			if ( c == 13 || c == 10 ) {
+				*datao = c;
+				datao++;
+				ws = qfalse;
+				datai++;
+				size++;
+				// skip double slash comments
+			} else if ( c == '/' && datai[1] == '/' ) {
+				while ( *datai && *datai != '\n' ) {
+					datai++;
+				}
+				ws = qfalse;
+				// skip /* */ comments
+			} else if ( c == '/' && datai[1] == '*' ) {
+				while ( *datai && ( *datai != '*' || datai[1] != '/' ) )
+				{
+					datai++;
+				}
+				if ( *datai ) {
+					datai += 2;
+				}
+				ws = qfalse;
+			} else {
+				if ( ws ) {
+					*datao = ' ';
+					datao++;
+				}
+				*datao = c;
+				datao++;
+				datai++;
+				ws = qfalse;
+				size++;
+			}
+		}
+	}
+	*datao = 0;
+	return size;
 }

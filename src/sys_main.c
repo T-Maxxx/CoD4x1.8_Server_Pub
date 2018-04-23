@@ -28,6 +28,7 @@
 #include "qcommon_io.h"
 #include "qcommon_logprint.h"
 #include "qcommon.h"
+#include "qcommon_mem.h"
 #include "sys_cod4defs.h"
 #include "filesystem.h"
 #include "sys_cod4loader.h"
@@ -37,6 +38,7 @@
 #include "sec_crypto.h"
 #include "cmd.h"
 #include "sapi.h"
+#include "xassets/extractor.h"
 #include <libgen.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -53,12 +55,14 @@ static char exit_cmdline[MAX_CMD + MAX_OSPATH] = "";
 static char binaryPath[ MAX_OSPATH ] = { 0 };
 static char installPath[ MAX_OSPATH ] = { 0 };
 static char exeFilename[ MAX_OSPATH ] = { 0 };
+static char exeFilenameShort[ MAX_OSPATH ] = { 0 };
 static char cmdline[MAX_CMD + MAX_OSPATH] = "";
 
 #ifndef MAXPRINTMSG
 #define MAXPRINTMSG 1024
 #endif
 
+cvar_t* sys_shutdowntimeout;
 
 /*
 ================
@@ -244,6 +248,7 @@ void Sys_DoSignalAction( int signal, const char* sigstring )
 	else
 	{
 		signalcaught = qtrue;
+		Sys_BeginShutdownWatchdog();
 		Com_Printf("Server received signal: %s\nShutting down server...\n", sigstring);
 		Com_sprintf(termmsg, sizeof(termmsg), "\nServer received signal: %s\nTerminating server...", sigstring);
 		SV_Shutdown( termmsg );
@@ -266,7 +271,7 @@ void Sys_PrintBinVersion( const char* name ) {
 	char* sep = "==============================================================";
 	fprintf( stdout, "\n\n%s\n", sep );
 
-	fprintf( stdout, "%s %s %s build %i %s\n", GAME_STRING,Q3_VERSION,PLATFORM_STRING, BUILD_NUMBER, __DATE__);
+	fprintf( stdout, "%s %s %s build %i %s\n", GAME_STRING,Q3_VERSION,PLATFORM_STRING, Sys_GetBuild(), __DATE__);
 
 	fprintf( stdout, " local install: %s\n", name );
 	fprintf( stdout, "%s\n\n", sep );
@@ -287,6 +292,8 @@ __cdecl void QDECL Sys_Error( const char *fmt, ... ) {
 	va_list		argptr;
 	char		msg[MAXPRINTMSG];
 	char		buffer[MAXPRINTMSG];
+
+	Sys_BeginShutdownWatchdog();
 
 	va_start (argptr,fmt);
 	Q_vsnprintf (msg, sizeof(msg), fmt, argptr);
@@ -371,6 +378,11 @@ void Sys_SetExeFile(const char *filepath)
 	Q_strncpyz(exeFilename, filepath, sizeof(exeFilename));
 }
 
+void Sys_SetExeFileShort(const char *filepath)
+{
+	Q_strncpyz(exeFilenameShort, filepath, sizeof(exeFilenameShort));
+}
+
 /*
 =================
 Sys_ExeFile
@@ -381,6 +393,10 @@ const char* Sys_ExeFile( void )
 	return exeFilename;
 }
 
+const char* Sys_ExeFileShort( void )
+{
+	return exeFilenameShort;
+}
 
 /*
 =================
@@ -459,11 +475,15 @@ int Sys_Main(char* commandLine){
 
     Sys_ThreadMain();
 
-    CON_Init();
+	Com_InitSmallZoneMemory( );
 
+    CON_Init();
+    extractor_init();
 /*    Sys_ImageFindConstant();   */
 
     Com_Init( commandLine );
+
+	sys_shutdowntimeout = Cvar_RegisterInt("sys_shutdowntimeout", 60, 30, 1200, CVAR_ARCHIVE, "When server is going to shutdown there will be a timeout in seconds after server gets killed in case it is still running");
 
     while ( 1 )
     {
@@ -476,13 +496,14 @@ void Sys_Restart(const char* reason)
 {
 	char commandline[1024];
 
+	Sys_BeginShutdownWatchdog();
+
 	SV_Shutdown( reason );
 	SV_SApiShutdown( );
 	Com_sprintf(commandline, sizeof(commandline), "%s %s", Sys_ExeFile(), Sys_GetCommandline());
 	Com_Printf("Restart commandline is: %s\n", commandline);
 	Sys_SetExitCmdline(commandline);
-
-	Cbuf_ExecuteText(EXEC_NOW, "quit\n");
+	Com_Quit_f();
 }
 
 
@@ -493,5 +514,37 @@ void Sys_BeginLoadThreadPriorities()
 
 void Sys_EndLoadThreadPriorities()
 {
+
+}
+
+
+void* Sys_ShutdownWatchdogThread(void* arg)
+{
+	int timeoutsec = (int)arg;
+	int maxmsec = timeoutsec * 1000 + Sys_Milliseconds();
+
+	do{
+		Sys_SleepSec(1);
+	}while(Sys_Milliseconds() < maxmsec);
+
+	_exit(-64);
+	return NULL;
+}
+
+void Sys_BeginShutdownWatchdog()
+{
+	static qboolean watchdogActive = false;
+	if(watchdogActive)
+	{
+		return;
+	}
+	threadid_t tinfo;
+	int timeout = 30;
+	if(sys_shutdowntimeout)
+	{
+		timeout = sys_shutdowntimeout->integer;
+	}
+	watchdogActive = true;
+	Sys_CreateNewThread(Sys_ShutdownWatchdogThread, &tinfo, (void*)timeout);
 
 }

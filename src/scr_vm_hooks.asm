@@ -86,10 +86,6 @@ global Scr_GetVector
 Scr_GetVector:
 	jmp dword [oScr_GetVector]
 
-global Scr_GetObject
-Scr_GetObject:
-	jmp dword [oScr_GetObject]
-
 global Scr_Error
 Scr_Error:
 	jmp dword [oScr_Error]
@@ -142,9 +138,9 @@ global Scr_MakeArray
 Scr_MakeArray:
 	jmp dword [oScr_MakeArray]
 
-global Scr_MakeArrayKey
-Scr_MakeArrayKey:
-	jmp dword [oScr_MakeArrayKey]
+global Scr_AddArrayKey
+Scr_AddArrayKey:
+	jmp dword [oScr_AddArrayKey]
 
 ;global Scr_Notify
 ;Scr_Notify:
@@ -222,10 +218,6 @@ Scr_BeginLoadScripts:
 global Scr_SetClassMap
 Scr_SetClassMap:
 	jmp dword [oScr_SetClassMap]
-
-global Scr_AddFields
-Scr_AddFields:
-	jmp dword [oScr_AddFields]
 
 global Scr_SetGenericField
 Scr_SetGenericField:
@@ -317,7 +309,7 @@ oScr_AddUndefined dd 0x815eea2
 oScr_AddVector dd 0x815ee12
 oScr_AddArray dd 0x815d5c0
 oScr_MakeArray dd 0x815ed8a
-oScr_MakeArrayKey dd 0x0815D0B8
+oScr_AddArrayKey dd 0x0815D0B8
 oScr_Notify dd 0x80c7604
 oScr_NotifyNum dd 0x815e762
 oScr_PrintPrevCodePos dd 0x814ef6e
@@ -337,7 +329,6 @@ oScr_AddSourceBuffer dd 0x814fbac
 oScr_InitAllocNode dd 0x814fea6
 oScr_BeginLoadScripts dd 0x814c266
 oScr_SetClassMap dd 0x8153a3a
-oScr_AddFields dd 0x81535ba
 oScr_SetGenericField dd 0x80c7eae
 oScr_GetGenericField dd 0x80c7d36
 oGScr_AddFieldsForHudElems dd 0x808db80

@@ -18,14 +18,11 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>
 ===========================================================================
 */
-
-
-
-#ifndef __SCR_VM_FUNCTIONS_H__
-#define __SCR_VM_FUNCTIONS_H__
+#pragma once
 
 #include "scr_vm.h"
 #include "g_sv_shared.h"
+#include "dobj.h"
 
 #ifndef SCR_ENTREF_DEFINED
 #define SCR_ENTREF_DEFINED
@@ -37,6 +34,8 @@ void PlayerCmd_SetUid(scr_entref_t arg);
 void PlayerCmd_GetGuid(scr_entref_t arg);
 void PlayerCmd_GetSteamID(scr_entref_t arg);
 void PlayerCmd_GetPlayerID(scr_entref_t arg);
+void PlayerCmd_GetSteamID64(scr_entref_t arg);
+void PlayerCmd_GetPlayerID64(scr_entref_t arg);
 void PlayerCmd_GetPower(scr_entref_t arg);
 void PlayerCmd_SetPower(scr_entref_t arg);
 void PlayerCmd_SetStat(scr_entref_t arg);
@@ -49,7 +48,9 @@ void PlayerCmd_SetJumpHeight(scr_entref_t arg);
 void PlayerCmd_SetMoveSpeed(scr_entref_t arg);
 void PlayerCmd_GetGeoLocation(scr_entref_t arg);
 void PlayerCmd_GetCountedFPS(scr_entref_t arg);
+void PlayerCmd_GetCountedFPSSweetspot(scr_entref_t arg);
 void PlayerCmd_GetSpectatorClient(scr_entref_t arg);
+void PlayerCmd_SetVelocity(scr_entref_t arg);
 
 void PlayerCmd_ForwardButtonPressed(scr_entref_t object);
 void PlayerCmd_BackButtonPressed(scr_entref_t object);
@@ -99,11 +100,29 @@ void GScr_SpawnVehicle();
 void GScr_SpawnHelicopter();
 void GScr_VectorAdd();
 void GScr_TypeTest();
-__cdecl void ClientScr_SetSessionTeam(gclient_t* gcl, client_fields_t* gfl);
 
 void PlayerCmd_GetSteamGroupMembership(scr_entref_t arg);
 
 void Scr_PrecacheString_f();
 void Scr_Destroy_f(scr_entref_t hud_elem_num);
 
-#endif
+void GScr_IsCvarDefined();
+
+void Scr_IsArray_f();
+void GScr_ArrayTest();
+
+qboolean GetTagInfoForEntity(gentity_t *ent, int partNameIdx, DObjPartCache_t *cache, int seekInSubModels);
+void PrintModelBonesInfo(gentity_t *ent);
+
+void GScr_Base64Encode();
+void GScr_Base64Decode();
+void GScr_IsEntity();
+void GScr_IsVector();
+void GScr_IsString();
+void GScr_IsFloat();
+void GScr_IsInt();
+void GScr_Float();
+void GScr_Pow();
+
+void GScr_CloneBrushModelToScriptModel(scr_entref_t brushModelEnt);
+void PlayerCmd_SetStance(scr_entref_t playerEntNum);

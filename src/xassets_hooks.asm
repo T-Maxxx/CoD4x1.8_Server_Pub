@@ -20,12 +20,12 @@
 
 %macro bin_import 2
 
-	SECTION .text		
-		global %1
-		%1: jmp dword [o%1]
-		
-	SECTION .rodata	
-		o%1 dd %2
+    SECTION .text		
+        global %1
+        %1: jmp dword [o%1]
+        
+    SECTION .rodata	
+        o%1 dd %2
 %endmacro
 
 
@@ -33,39 +33,35 @@ SECTION .text
 
 global DB_SetInitializing
 DB_SetInitializing:
-	jmp dword [oDB_SetInitializing]
+    jmp dword [oDB_SetInitializing]
 
 global DB_ModFileExists
 DB_ModFileExists:
-	jmp dword [oDB_ModFileExists]
+    jmp dword [oDB_ModFileExists]
 
 global DB_LoadXAssets
 DB_LoadXAssets:
-	jmp dword [oDB_LoadXAssets]
+    jmp dword [oDB_LoadXAssets]
 
 global DB_GetXAssetTypeSize
 DB_GetXAssetTypeSize:
-	jmp dword [oDB_GetXAssetTypeSize]
+    jmp dword [oDB_GetXAssetTypeSize]
 
 global XAnimInit
 XAnimInit:
-	jmp dword [oXAnimInit]
+    jmp dword [oXAnimInit]
 
 global DB_FreeUnusedResources
 DB_FreeUnusedResources:
-	jmp dword [oDB_FreeUnusedResources]
+    jmp dword [oDB_FreeUnusedResources]
 
 global DB_LoadSounds
 DB_LoadSounds:
-	jmp dword [oDB_LoadSounds]
-
-global DB_LoadDObjs
-DB_LoadDObjs:
-	jmp dword [oDB_LoadDObjs]
+    jmp dword [oDB_LoadSounds]
 
 global BG_FillInAllWeaponItems
 BG_FillInAllWeaponItems:
-	jmp dword [oBG_FillInAllWeaponItems]
+    jmp dword [oBG_FillInAllWeaponItems]
 
 
 SECTION .rodata
@@ -77,7 +73,6 @@ oDB_GetXAssetTypeSize dd 0x81da6ce
 oXAnimInit dd 0x81b649c
 oDB_FreeUnusedResources dd 0x82046f2
 oDB_LoadSounds dd 0x8209c00
-oDB_LoadDObjs dd 0x812616c
 oBG_FillInAllWeaponItems dd 0x80622ba
 
 bin_import DB_PostLoadXZone, 0x8205DAE

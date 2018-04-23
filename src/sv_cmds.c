@@ -316,6 +316,11 @@ uint64_t SV_GetPlayerSteamIDByHandle( const char* handle)
 	{
 		return cl.cl->steamid;
 	}
+	uint64_t sid = SV_SApiStringToID(handle);
+	if(sid > 0 && SV_SApiSteamIDIndividualSteamOnly(sid))
+	{
+		return sid;
+	}
 	return 0;
 }
 
@@ -532,9 +537,9 @@ static void SV_MiniStatus_f( void ) {
 
 	Com_Printf ("map: %s\n", sv_mapname->string );
 
-	Com_Printf ("num score ping playerid          steamid           name                             address                                             FPS XVer\n");
+	Com_Printf ("num score ping playerid            steamid           name                             address                                             FPS XVer\n");
 
-	Com_Printf ("--- ----- ---- ----------------- ----------------- -------------------------------- --------------------------------------------------- --- ----------- \n");
+	Com_Printf ("--- ----- ---- ------------------- ----------------- -------------------------------- --------------------------------------------------- --- ----------- \n");
 	for (i=0,cl=svs.clients, gclient = level.clients ; i < sv_maxclients->integer ; i++, cl++, gclient++)
 	{
 		if (!cl->state)
@@ -564,7 +569,7 @@ static void SV_MiniStatus_f( void ) {
 
     Com_Printf ("%s", psti );
 
-    l = 18 - strlen(psti);
+    l = 20 - strlen(psti);
     j = 0;
 
     do
@@ -671,15 +676,15 @@ static void SV_Status_f( void ) {
   }else{
 	Com_Printf("hostname: %s\n", sv_hostname->string);
 	Com_Printf("version : %s\n", com_version->string);
-	netadr_t* outadr = NET_GetDefaultCommunicationSocket();
+	netadr_t* outadr = NET_GetDefaultCommunicationSocket(NA_IP);
 	Com_Printf("udp/ip  : %s\n", NET_AdrToString(outadr));
 	Com_Printf("os      : %s\n", OS_STRING);
 	Com_Printf("type    : dedicated server\n");
 	Com_Printf("map     : %s\n", sv_mapname->string);
 	Com_Printf("\n");
 
-	Com_Printf ("num score ping playerid          steamid           name                             lastmsg address                                              qport rate\n");
-	Com_Printf ("--- ----- ---- ----------------- ----------------- -------------------------------- ------- ---------------------------------------------------- ----- -----\n");
+	Com_Printf ("num score ping playerid            steamid           name                             lastmsg address                                              qport rate\n");
+	Com_Printf ("--- ----- ---- ------------------- ----------------- -------------------------------- ------- ---------------------------------------------------- ----- -----\n");
   }
 
 	for (i=0,cl=svs.clients, gclient = level.clients; i < sv_maxclients->integer ; i++, cl++, gclient++)
@@ -716,12 +721,12 @@ static void SV_Status_f( void ) {
     			j++;
     		} while(j < l);
 
-        Com_Printf ("%s", cl->name);
+        Com_Printf ("%s", cl->shortname);
 
     		// TTimo adding a ^7 to reset the color
     		// NOTE: colored names in status breaks the padding (WONTFIX)
     		Com_Printf ("^7");
-    		l = 16 - Q_PrintStrlen(cl->name);
+    		l = 16 - Q_PrintStrlen(cl->shortname);
     		j = 0;
 
     		do
@@ -736,7 +741,7 @@ static void SV_Status_f( void ) {
 
       Com_Printf ("%s", psti );
 
-      l = 18 - strlen(psti);
+      l = 20 - strlen(psti);
       j = 0;
 
       do
@@ -757,12 +762,12 @@ static void SV_Status_f( void ) {
       } while(j < l);
 
 
-      Com_Printf ("%s", cl->shortname);
+      Com_Printf ("%s", cl->name);
 
       // TTimo adding a ^7 to reset the color
       // NOTE: colored names in status breaks the padding (WONTFIX)
       Com_Printf ("^7");
-      l = 33 - Q_PrintStrlen(cl->shortname);
+      l = 33 - Q_PrintStrlen(cl->name);
       j = 0;
 
       do
@@ -2204,7 +2209,7 @@ void SV_DownloadMap_f()
 		return;
 	}
 
-	url = Z_Malloc(len +1);
+	url = S_Malloc(len +1);
 	if(url == NULL)
 	{
 		Com_PrintError("SV_DownloadMap_f(): Out of memory\n");

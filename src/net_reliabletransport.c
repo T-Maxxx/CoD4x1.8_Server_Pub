@@ -8,6 +8,7 @@
 #include "sys_net.h"
 #include "msg.h"
 #include "net_reliabletransport.h"
+#include "sys_main.h"
 #include <string.h>
 #include <stdlib.h>
 
@@ -195,6 +196,19 @@ void ReliableMessageWriteSelectiveAcklist(framedata_t *frame, msg_t* msg)
 	msg->data[numbytepos] = count;
 }
 
+#ifdef _LAGDEBUG
+
+//Hit counter
+typedef struct
+{
+	unsigned int lastcleared;
+	int hitcount;
+}dbghitcounter_t;
+dbghitcounter_t phitcounter[65535]; //ALL Clients
+
+#endif
+
+
 //This function sends one new sequence
 void ReliableMessagesTransmitNextFragment(netreliablemsg_t *chan)
 {
@@ -219,6 +233,21 @@ void ReliableMessagesTransmitNextFragment(netreliablemsg_t *chan)
 			MSG_WriteShort(&buf, chan->txwindow.windowsize);
 			MSG_WriteShort(&buf, 0);
 			NET_SendPacket( chan->sock, buf.cursize, buf.data, &chan->remoteAddress );	
+			
+#ifdef _LAGDEBUG			
+			dbghitcounter_t *dbgc = &phitcounter[(unsigned short)chan->qport];
+			unsigned int time = Sys_Milliseconds();
+			if(dbgc->lastcleared + 1000 < time)
+			{
+				dbgc->lastcleared = time;
+				if(dbgc->hitcount > 44)
+				{
+					Com_DPrintfLogfile("Hitcount exceeded 44 in SendPacket for qport %hu Count %d (ACK only)\n", chan->qport, dbgc->hitcount);
+				}
+				dbgc->hitcount = 0;
+			}
+			dbgc->hitcount++;
+#endif			
 			chan->txwindow.packets++;
 			chan->nextacktime = chan->time + 350;
 			chan->txwindow.rateInfo.bytesTotal += buf.cursize; //Track the rate
@@ -238,26 +267,42 @@ void ReliableMessagesTransmitNextFragment(netreliablemsg_t *chan)
 	    {
 		//Already received by the remote end
 #ifdef RELIABLE_DEBUG
-		Com_Printf("Send: Skip over %d\n", sequence);
+			Com_Printf("Send: Skip over %d\n", sequence);
 #endif
 	    }else{
-		MSG_WriteLong(&buf, 0xfffffff0);
-		MSG_WriteShort(&buf, chan->qport);
-		MSG_WriteLong(&buf, sequence);
-		MSG_WriteLong(&buf, chan->rxwindow.sequence); //Acknowledge for the other end
-		ReliableMessageWriteSelectiveAcklist(&chan->rxwindow, &buf);
-		MSG_WriteShort(&buf, chan->txwindow.windowsize);
-		MSG_WriteShort(&buf, chan->txwindow.fragments[sequence % chan->txwindow.bufferlen].len); //Fragment size
-		MSG_WriteData(&buf, chan->txwindow.fragments[sequence % chan->txwindow.bufferlen].data, 
-							chan->txwindow.fragments[sequence % chan->txwindow.bufferlen].len);
-							
-		NET_SendPacket( chan->sock, buf.cursize, buf.data, &chan->remoteAddress );
-		chan->txwindow.packets++;
-		chan->nextacktime = chan->time + 350;
+			MSG_WriteLong(&buf, 0xfffffff0);
+			MSG_WriteShort(&buf, chan->qport);
+			MSG_WriteLong(&buf, sequence);
+			MSG_WriteLong(&buf, chan->rxwindow.sequence); //Acknowledge for the other end
+			ReliableMessageWriteSelectiveAcklist(&chan->rxwindow, &buf);
+			MSG_WriteShort(&buf, chan->txwindow.windowsize);
+			MSG_WriteShort(&buf, chan->txwindow.fragments[sequence % chan->txwindow.bufferlen].len); //Fragment size
+			MSG_WriteData(&buf, chan->txwindow.fragments[sequence % chan->txwindow.bufferlen].data, 
+								chan->txwindow.fragments[sequence % chan->txwindow.bufferlen].len);
+								
+			NET_SendPacket( chan->sock, buf.cursize, buf.data, &chan->remoteAddress );
+
+#ifdef _LAGDEBUG			
+			dbghitcounter_t *dbgc = &phitcounter[(unsigned short)chan->qport];
+			unsigned int time = Sys_Milliseconds();
+			if(dbgc->lastcleared + 1000 < time)
+			{
+				dbgc->lastcleared = time;
+				if(dbgc->hitcount > 44)
+				{
+					Com_DPrintfLogfile("Hitcount exceeded 44 in SendPacket for qport %hu Count %d\n", chan->qport, dbgc->hitcount);
+				}
+				dbgc->hitcount = 0;
+			}
+			dbgc->hitcount++;
+#endif	
+
+			chan->txwindow.packets++;
+			chan->nextacktime = chan->time + 350;
 #ifdef RELIABLE_DEBUG
-		Com_Printf("Sending SEQ: %d ACK: %d\n", sequence, chan->rxwindow.sequence);
+			Com_Printf("Sending SEQ: %d ACK: %d\n", sequence, chan->rxwindow.sequence);
 #endif
-		chan->txwindow.rateInfo.bytesTotal += buf.cursize; //Track the rate
+			chan->txwindow.rateInfo.bytesTotal += buf.cursize; //Track the rate
 	    }
 	}
 
@@ -688,28 +733,41 @@ void ReliableMessagesFrame(netreliablemsg_t *chan, int now)
 	{
 		return;
 	}
-        lastTime = ReliableMessageGetCurrentTime(chan);
-        //Get the time elapsed between last calling of this function and now
-        elapsed = now - lastTime;
-        ReliableMessageSetCurrentTime(chan, now);
-#ifdef RELIABLE_DEBUG
-        if(elapsed > 250)
-        {
-            Com_Printf("Omit sending packets - burst prevention\n");
-            return;
-        }
+    lastTime = ReliableMessageGetCurrentTime(chan);
+    //Get the time elapsed between last calling of this function and now
+    elapsed = now - lastTime;
+    ReliableMessageSetCurrentTime(chan, now);
+
+#ifdef _LAGDEBUG
+	if(elapsed < 0)
+		Com_DPrintfLogfile("FATAL: elapsed is negative\n");
 #endif
+
+    if(elapsed > 250)
+    {
+#ifdef RELIABLE_DEBUG
+        Com_Printf("Omit sending packets - burst prevention\n");
+#endif
+        return;
+    }
+
 	//HOW MANY frames we have to send compared to last time?
 	//Condition: windowsize -> sending all packets in 1000msec window
 	//Counting the amount of packets so we can stay with the rate in line
-        millipackets = elapsed * chan->txwindow.windowsize + chan->txwindow.unsentmillipackets;
-        packets = millipackets / 1000;
-        chan->txwindow.unsentmillipackets = millipackets % 1000;
-        //Sending all packets
-        for(i = 0; i < packets; ++i)
-        {
-            ReliableMessagesTransmitNextFragment(chan);
-        }
-        ReliableMessageTrackRate(chan);
+    millipackets = elapsed * chan->txwindow.windowsize + chan->txwindow.unsentmillipackets;
+    packets = millipackets / 1000;
+    chan->txwindow.unsentmillipackets = millipackets % 1000;
+    //Sending all packets
+	//Com_Printf("Packet count: %d\n", packets);
+#ifdef _LAGDEBUG
+
+	if(packets > 5)
+		Com_DPrintfLogfile("More than 5 packets: %d\n", packets);
+#endif
+    for(i = 0; i < packets; ++i)
+    {
+        ReliableMessagesTransmitNextFragment(chan);
+    }
+    ReliableMessageTrackRate(chan);
 }
 

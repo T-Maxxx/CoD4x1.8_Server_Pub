@@ -32,12 +32,12 @@ typedef struct sec_file_s{
     char path[MAX_OSPATH];
     int size;
     char hash[4096];
-    qboolean alreadyInstalled;
+    qboolean needed;
     struct sec_file_s *next;
 }sec_file_t;
 
 
-#define SEC_UPDATE_VERSION "1.0"
+#define SEC_UPDATE_VERSION "1.1"
 
 #define SEC_UPDATE_INITIALBUFFSIZE 10240
 
@@ -54,8 +54,7 @@ typedef struct sec_file_s{
 
 
 #define SEC_UPDATE_DOWNLOAD(baseurl, qpath) "%s%s", baseurl, qpath
-#define SEC_UPDATE_GETVERSION "/?ver=%g&os=%s&build=%d&type=%c", SEC_VERSION, OS_STRING, BUILD_NUMBER, SEC_TYPE
-#define SEC_UPDATE_GETGROUNDVERSION "/?ver=%g&os=%s&build=%d&type=%c", SEC_VERSION, OS_STRING, 753, 'b'
+#define SEC_UPDATE_GETVERSION "/?ver=%g&os=%s&build=%d&type=%c", SEC_VERSION, OS_STRING, Sys_GetBuild(), SEC_TYPE
 
 #define	UPDATE_SERVER_NAME	"http://cod4update.cod4x.me/svupdate/"
 

@@ -256,7 +256,7 @@ qboolean HL2Rcon_SourceRconAuth(netadr_t *from, msg_t *msg, rconUser_t* user){
 
 badrcon:
 	Cmd_EndTokenizedString();
-	Com_Printf ("Bad rcon from %s (TCP)\n", NET_AdrToString (from) );
+	Com_Printf ("Bad rcon from %s using password %s\n", NET_AdrToString (from), loginstring);
 	//Don't allow another attempt for 20 seconds
 
 	SV_PlayerAddBanByip(from, "You are banned from this server for a bad rcon attempt", Com_GetRealtime() + 20);
@@ -730,7 +730,7 @@ void HL2Rcon_StatusCommand()
 
     Com_Printf("hostname: %s\n", cleanhostname);
     Com_Printf("version : %s\n", com_version->string);
-    netadr_t* outadr = NET_GetDefaultCommunicationSocket();
+    netadr_t* outadr = NET_GetDefaultCommunicationSocket(NA_IP);
     Com_Printf("udp/ip  : %s\n", NET_AdrToString(outadr));
     Com_Printf("os      : %s\n", OS_STRING);
     Com_Printf("type    : dedicated server\n");
@@ -757,7 +757,7 @@ void HL2Rcon_StatusCommand()
 	if (!cl->state)
 		continue;
 
-	SV_SApiSteamIDToString(cl->playerid, psti, sizeof(psti));
+	SV_SApiSteamIDTo3IDString(cl->playerid, psti, sizeof(psti));
 
 	int contime = (svs.time - cl->connectedTime) / 1000;
 

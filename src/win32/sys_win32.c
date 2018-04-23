@@ -36,6 +36,7 @@
 #include <errno.h>
 #include <inttypes.h>
 #include <io.h>
+#include <Shlobj.h>
 
 void Sys_ShowErrorDialog(const char* functionName);
 
@@ -102,15 +103,10 @@ qboolean Sys_RandomBytes( byte *string, int len )
 Sys_Mkdir
 ==================
 */
-qboolean Sys_Mkdir( const char *path )
+qboolean Sys_Mkdir(const char *path)
 {
-
-	int result = _mkdir( path );
-
-	if( result != 0 && errno != EEXIST)
-		return qfalse;
-
-	return qtrue;
+    int result = SHCreateDirectoryExA(0, path, 0);
+    return result == ERROR_SUCCESS || result == ERROR_FILE_EXISTS || result == ERROR_ALREADY_EXISTS;
 }
 
 /*
@@ -550,6 +546,34 @@ char *Sys_Cwd( void ) {
 
 /*
 ==============
+Sys_Dirname
+==============
+*/
+const char *Sys_Dirname(const char *path)
+{
+	char dir[MAX_OSPATH] = {'\0'};
+    char *slash1 = 0;
+    char *slash2 = 0;
+    char *max = 0;
+	mvabuf;
+
+    strcpy(dir, path);
+    slash1 = strrchr(dir, '/');
+    slash2 = strrchr(dir, '\\');
+
+    if (slash1 && slash2)
+        max = slash1 < slash2 ? slash2 : slash1;
+    else if (slash1 && !slash2)
+        max = slash1;
+    else if (!slash1 && slash2)
+        max = slash2;
+        
+    if (max)
+        *max = '\0';
+	return va("%s", dir);
+}
+/*
+==============
 Sys_PlatformInit
 
 Win32 specific initialisation
@@ -593,6 +617,21 @@ void Sys_PlatformInit( void )
 }
 
 HMODULE currentLibHandle = NULL;
+
+void Sys_LoadLibraryError(char* errormessage, int maxlen)
+{
+	DWORD lastError;
+
+	lastError = GetLastError();
+
+	if(lastError != 0)
+	{
+		FormatMessage(FORMAT_MESSAGE_FROM_SYSTEM, NULL, lastError, MAKELANGID(LANG_NEUTRAL,SUBLANG_DEFAULT), (LPSTR)errormessage, maxlen -1, NULL);
+	}else{
+		Q_strncpyz(errormessage, "an unknown error occurred while loading shared library", maxlen);
+	}
+}
+
 
 void* Sys_LoadLibrary(const char* dlfile)
 {
@@ -834,6 +873,7 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 	if(copylen >= (sizeof(lpFilename) -1))
 	{
 		Sys_SetExeFile( "" );
+		Sys_SetExeFileShort( "" );
 		Sys_SetBinaryPath( "" );
 		MessageBoxA(NULL, "Path is too long. The whole path to location of this .exe file must not exceed 254 characters", CLIENT_WINDOW_TITLE " Error", MB_OK | MB_ICONERROR);
 		return 1;
@@ -850,6 +890,7 @@ int WINAPI WinMain( HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLin
 				return 1;
 			}
 			Sys_SetBinaryPath( lpFilename );
+			Sys_SetExeFileShort( lastSep +1 );
 		}else{
 			MessageBoxA(NULL, "GetModuleFileName() returned an unexpected filepath.", CLIENT_WINDOW_TITLE " Error", MB_OK | MB_ICONERROR);
 			return 1;

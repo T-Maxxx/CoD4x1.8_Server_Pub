@@ -73,7 +73,8 @@ ralias Plugin_CanPlayerUseCommand, Auth_CanPlayerUseCommand
 ralias Plugin_SV_Cmd_GetPlayerClByHandle ,SV_GetPlayerClByHandle
 ralias Plugin_SV_Cmd_GetPlayerNameByHandle, SV_GetPlayerNameByHandle
 ralias Plugin_SV_Cmd_GetPlayerSteamIDByHandle, SV_GetPlayerSteamIDByHandle
-
+ralias Plugin_SetStat, SV_SetClientStat
+ralias Plugin_GetStat, SV_GetClientStat
 pexport Cmd_GetInvokerClnum
 pexport Cmd_GetInvokerPower
 pexport Cmd_GetInvokerSteamID
@@ -151,7 +152,7 @@ pexport Scr_AddUndefined
 pexport Scr_AddVector
 pexport Scr_AddArray
 pexport Scr_MakeArray
-pexport Scr_MakeArrayKey
+pexport Scr_AddArrayKey
 pexport Scr_ExecEntThread
 pexport Scr_ExecThread
 pexport Scr_FreeThread

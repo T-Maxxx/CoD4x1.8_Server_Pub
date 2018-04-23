@@ -102,6 +102,97 @@ Returns current time in seconds since 01/01/_2012_ UTC.
 
 Usage example: `t = getRealTime();`
 
+#### `IsCvarDefined(string <cvar name>)`
+Returns boolean value that states whether the cvar of given name has been already defined or not.
+
+Usage example:
+```
+get_dvar_or_default(name, default_value)
+{
+    if (IsCvarDefined(name))
+       return GetDvar(name);
+    return default_value;
+}
+```
+
+#### `isArray(<variable>)`
+
+Returns true if passed variable has 'array' type.
+
+Usage example:
+```
+if (isArray(a))
+   do_something();
+else
+   do_something_else();
+```
+
+#### `isEntity(<variable>)`
+
+Returns true if passed variable has 'entity' type.
+
+Usage example:
+```
+if (isEntity(a))
+   do_something();
+else
+   do_something_else();
+```
+
+#### `isVector(<variable>)`
+
+Returns true if passed variable has 'vector' type.
+
+Usage example:
+```
+if (isVector(a))
+   do_something();
+else
+   do_something_else();
+```
+
+#### `isString(<variable>)`
+
+Returns true if passed variable has 'string' type. Returns false for localized strings.
+
+Usage example:
+```
+if (isString(a))
+   do_something();
+else
+   do_something_else();
+```
+
+#### `isFloat(<variable>)`
+
+Returns true if passed variable has 'float' type.
+
+Usage example:
+```
+if (isFloat(a))
+   do_something();
+else
+   do_something_else();
+```
+
+#### `isInt(<variable>)`
+
+Returns true if passed variable has 'int' type.
+
+Usage example:
+```
+if (isInt(a))
+   do_something();
+else
+   do_something_else();
+```
+
+#### `float(<int, float, bool or string>)`
+
+Casts float on passed variable.
+
+Usage example: `floatVal = float("150.9");`
+
 ### Players Related Functions
 
 #### `GetUserinfo(string <variable_name>)`
@@ -186,6 +277,13 @@ Changes the movement speed of targeted player.
 
 Usage example: `self setmovespeed(300);`
 
+#### `setVelocity(<vec velocity>)`
+
+Changes current player velocity. Note that you might experience some kind of player lag shortly after function has been called. 
+This happens due to small server\client internal structure mismatch. After synchronizing (few frames) everything will be fine.
+
+Usage example: `self setVelocity((0, 0, 300)); // Go up.`
+
 ### String Functions
 
 #### `StrTokByLen(string <string>, int <maxcharacter count>)`
@@ -256,6 +354,18 @@ Usage exmaple: `date = TimeToString(1468578161, 1, "%c");`
 Calculates and returns SHA256 sum of the given string.
 
 Usage example: `hash = sha256("Foo");`
+
+#### `base64Encode(string <string>)`
+
+Returns Base64 encoded string of given string.
+
+Usage example: `encoded = base64Encode("String to be encoded");`
+
+#### `base64Decode(string <string>)`
+
+Returns Base64 decoded string of given string.
+
+Usage example: `decoded = base64Decode("Too lazy to get some encoded string=");`
 
 ### File Operations
 
@@ -334,6 +444,63 @@ Removes first test client it finds on the server.
 
 Usage example: `entity = removeTestClient()`
 
+**Bot functions below TODO: please, fix my english and remove this line.**
+
+#### `<botEntity> botMoveTo(<origin>)`
+
+Makes bot move directly to `origin` no matter where he points to.
+
+*origin*: 3-dimensional vector (x, y, z)
+
+Usage example 1: `bot botMoveTo(ent.origin);`
+
+Usage example 2: `bot botMoveTo((100, 200, 300)); /* 300 (z) will be ignored. */`
+
+Usage example 3: `bot botMoveTo(GetOrigin(enemy_player));`
+
+#### `<botEntity> botLookAtPlayer(<player>, [tag_name="pelvis"])`
+
+Using prediction, bot will look at `player` `tag_name` bone origin. Function must be called each server frame to simulate aiming.
+
+For now, bots aren't 100% accurate when shooting in the head.
+
+*player*: client entity.
+
+*tag_name*: Aim location. Bone with this name must exist in *player* model.
+
+Usage example 1: `bot botLookAtPlayer(ent);`
+
+Usage example 2: `bot botLookAtPlayer(ent, "j_head");`
+
+#### `<botEntity> botAction(<<sign>action>)`
+
+Forces bot to do or to stop doing `action`.
+
+*sign*: '+' or '-'.
+
+*action*: must be one of "gostand gocrouch goprone fire melee frag smoke reload sprint leanleft leanright ads holdbreath".
+
+Usage example 1: `bot botAction("+fire");`
+
+Usage example 2: `bot botAction("-fire");`
+
+#### `<botEntity> botStop()`
+
+Forces bot to stop doing anything.
+
+Usage example: `bot botStop();`
+
+#### `<botEntity> botLookAt(<origin>, [duration=0.05])`
+
+Forces bot to look at specified position. Rotation will take `duration` seconds.
+
+*origin*: 3-dimensional vector (x, y, z).
+
+*duration*: float value. Must be >= 1.0/sv_fps->integer (usually >= 0.05). Default: 0.05.
+
+Usage example 1: `bot botLookAt(ent.origin); // Instant look at ent's origin`
+
+Usage example 2: `bot botLookAt((0, 0, 0), 5.0); // Look at map center. Rotation will take 5.0 seconds.`
 
 ## Appendix: All Known Script Functions
 

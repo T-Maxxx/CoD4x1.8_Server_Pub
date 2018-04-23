@@ -16,6 +16,8 @@
 #include "sec_crypto.h"
 #include "g_sv_shared.h"
 
+cvar_t* sv_usesteam64id;
+
 int (*Init)(imports_t* sapi_imports, exports_t* exports);
 
 
@@ -124,7 +126,7 @@ static uint64_t ParseSteam3ID(const char* h)
 		}
 		accounttypei = AccountTypeCharToInt(accounttype);
 
-		if(cFieldConverted == EOF || cFieldConverted != 3 || extracheck || (universe > 4 && universe != 32) || universe < 1 || accounttypei < 1 || accounttypei > 10)
+		if(cFieldConverted == EOF || cFieldConverted != 3 || extracheck || (universe > 4 && (universe < 32 || universe >= 40)) || universe < 1 || accounttypei < 1 || accounttypei > 10)
 		{
 			return 0;
 		}
@@ -233,7 +235,7 @@ uint64_t ParseSteam64ID(const char* h)
 	accounttype = (steamid & 0xF0000000000000ULL) >> 52;
 	universe = (steamid & 0xFF00000000000000ULL) >> 56;
 
-	if((universe > 4 && universe != 32) || universe < 1 || accounttype < 1 || accounttype > 10)
+	if((universe > 4 && (universe < 32 || universe >= 40)) || universe < 1 || accounttype < 1 || accounttype > 10)
 	{
 		return 0;
 	}
@@ -249,7 +251,7 @@ qboolean SV_SApiSteamIDIndividual(uint64_t steamid)
 	universe = (steamid & 0xFF00000000000000ULL) >> 56;
 	instance = (steamid & 0xFFFFF00000000ULL) >> 32;
 
-	if((universe != 1 && universe != 32) || accounttype != 1 || instance != 1)
+	if((universe != 1 && (universe < 32 || universe >= 40)) || accounttype != 1 || instance != 1)
 	{
 		return qfalse;
 	}
@@ -292,8 +294,9 @@ uint64_t SV_SApiStringToID(const char* string)
 
 char accounttypechars[] = {'I', 'U', 'M', 'G', 'A', 'P', 'C', 'g', 'T', ' ', 'a'};
 
-void SV_SApiSteamIDToString(uint64_t steamid, char* string, int length)
+void SV_SApiSteamIDTo3IDString(uint64_t steamid, char* string, int length)
 {
+
 	uint32_t accounttype, universe, accountid;
 
 	accounttype = (steamid & 0xF0000000000000ULL) >> 52;
@@ -301,12 +304,23 @@ void SV_SApiSteamIDToString(uint64_t steamid, char* string, int length)
 	//instance = (steamid & 0xFFFFF00000000ULL) >> 32;
 	accountid = (steamid & 0xFFFFFFFFULL);
 
-	if((universe > 4 && universe != 32) || universe < 1 || accounttype < 1 || accounttype > 10)
+	if((universe > 4 && (universe < 32 || universe >= 40)) || universe < 1 || accounttype < 1 || accounttype > 10)
 	{
 		Q_strncpyz(string, "[I:0:0]", length);
 		return;
 	}
 	Com_sprintf(string, length, "[%c:%u:%u]", accounttypechars[accounttype], universe, accountid);
+}
+
+
+void SV_SApiSteamIDToString(uint64_t steamid, char* string, int length)
+{
+	if(sv_usesteam64id && sv_usesteam64id->boolean)
+	{
+		SV_SApiSteamIDTo64String(steamid, string, length);
+	}else{
+		SV_SApiSteamIDTo3IDString(steamid, string, length);
+	}
 }
 
 /**
@@ -454,10 +468,10 @@ uint64_t SV_SApiGUID2PlayerID(const char* guid)
 
 	for(i = 0; i < sizeof(diggest2); ++i)
 	{
-		digit2[i] = guid[2*i];
-		digit2[i+1] = guid[2*i +1];
-		digit2[i+2] = 0;
-		diggest2[i] = strtol(digit2, NULL, 16);;
+		digit2[0] = guid[2*i];
+		digit2[1] = guid[2*i +1];
+		digit2[2] = 0;
+		diggest2[i] = strtol(digit2, NULL, 16);
 	}
 
 	//Random account id
@@ -488,6 +502,7 @@ void SV_GetSS_f();
 
 void SV_InitSApi()
 {
+	char errormsg[1024];
 	void* hmodule;
 	imports_t exports;
 	exports.Com_Printf = Com_Printf;
@@ -503,7 +518,7 @@ void SV_InitSApi()
 	exports.SV_SendReliableServerCommand = SV_SendReliableServerCommand;
 	exports.SV_AddBanForClient = SV_AddBanForClient;
 	exports.SV_ScreenshotArrived = SV_ScreenshotArrived;
-  exports.SV_ModuleArrived = SV_ModuleArrived;
+	exports.SV_ModuleArrived = SV_ModuleArrived;
 	exports.FS_SV_HomeWriteFile = FS_SV_HomeWriteFile;
 	exports.Sys_Milliseconds = Sys_Milliseconds;
 	exports.pkcs_5_alg2 = pkcs_5_alg2_200sleep;
@@ -513,11 +528,13 @@ void SV_InitSApi()
 	exports.Cvar_RegisterBool = Cvar_RegisterBool;
 	exports.Cvar_SetString = Cvar_SetString;
 
+	sv_usesteam64id = Cvar_RegisterBool("sv_usesteam64id", qtrue, CVAR_ARCHIVE, "Display and log Steam64 id in most commands");
 
 	hmodule = Sys_LoadLibrary("steam_api" DLL_EXT);
 	if(hmodule == NULL)
 	{
-		Com_PrintError("steam_api.dll not found. Steam is not going to work.\n");
+		Sys_LoadLibraryError(errormsg, sizeof(errormsg));
+		Com_PrintError("steam_api" DLL_EXT " not found or it was not possible to load. Error is: %s. Steam is not going to work.\n", errormsg);
 		return;
 	}
 	Init = Sys_GetProcedure("Init");

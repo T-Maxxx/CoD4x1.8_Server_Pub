@@ -51,6 +51,9 @@
 #include "httpftp.h"
 #include "huffman.h"
 #include "sapi.h"
+#include "dobj.h"
+#include "xassets/extractor.h"
+#include "sec_update.h"
 
 #include <string.h>
 #include <setjmp.h>
@@ -340,7 +343,7 @@ sysEvent_t* Com_GetSystemEvent( void )
 		int   len;
 
 		len = strlen( s ) + 1;
-		b = Z_Malloc( len );
+		b = S_Malloc( len );
 		strcpy( b, s );
 		Com_QueueEvent( 0, SE_CONSOLE, 0, 0, len, b );
 	}
@@ -561,7 +564,7 @@ void Com_Quit_f( void ) {
   Com_Printf("quitting...\n");
 
 	// don't try to shutdown if we are in a recursive error
-  PHandler_Event(PLUGINS_ONTERMINATE, NULL); //Notify all plugins to hold and stop threads now
+  PHandler_Event(PLUGINS_ONTERMINATE); //Notify all plugins to hold and stop threads now
 
   Com_Printf("All plugins have terminated\n");
 
@@ -619,12 +622,12 @@ static void Com_InitCvars( void ){
     com_fixedtime = Cvar_RegisterInt("fixedtime", 0, 0, 1000, 0x80, "Use a fixed time rate for each frame");
     com_maxFrameTime = Cvar_RegisterInt("com_maxFrameTime", 100, 50, 1000, 0, "Time slows down if a frame takes longer than this many milliseconds");
     com_animCheck = Cvar_RegisterBool("com_animCheck", qfalse, 0, "Check anim tree");
-    s = va("%s %s %s build %i %s", GAME_STRING,Q3_VERSION,PLATFORM_STRING, BUILD_NUMBER, __DATE__);
+    s = va("%s %s %s build %i %s", GAME_STRING,Q3_VERSION,PLATFORM_STRING, Sys_GetBuild(), __DATE__);
 
     com_version = Cvar_RegisterString ("version", s, CVAR_ROM | CVAR_SERVERINFO , "Game version");
     com_shortversion = Cvar_RegisterString ("shortversion", Q3_VERSION, CVAR_ROM | CVAR_SERVERINFO , "Short game version");
 
-    Cvar_RegisterString ("build", va("%i", BUILD_NUMBER), CVAR_ROM | CVAR_SERVERINFO , "");
+    Cvar_RegisterString ("build", va("%i", Sys_GetBuild()), CVAR_ROM | CVAR_SERVERINFO , "");
     com_useFastfiles = Cvar_RegisterBool ("useFastFiles", qtrue, 16, "Enables loading data from fast files");
     //MasterServer
     //AuthServer
@@ -647,7 +650,7 @@ void Com_InitThreadData()
 
     Sys_SetValue(1, 0);
     Sys_SetValue(2, &jmpbuf_obj);
-    Sys_SetValue(3, (const void*)0x14087620);
+    Sys_SetValue(3, (void*)0x14087620); //box_brush, box_model
 }
 
 
@@ -789,7 +792,7 @@ void Com_Init(char* commandLine){
     if(setjmp(*abortframe)){
         Sys_Error(va("Error during Initialization:\n%s\n", com_errorMessage));
     }
-    Com_Printf("%s %s %s build %i %s\n", GAME_STRING,Q3_VERSION,PLATFORM_STRING, BUILD_NUMBER, __DATE__);
+    Com_Printf("%s %s %s build %i %s\n", GAME_STRING,Q3_VERSION,PLATFORM_STRING, Sys_GetBuild(), __DATE__);
 
 
     Cbuf_Init();
@@ -806,6 +809,15 @@ void Com_Init(char* commandLine){
     Cvar_Init();
 
     Sec_Init();
+
+	Com_InitZoneMemory();
+
+	FS_InitCvars(); //Needed for autoupdate
+
+    Sys_Init();
+	NET_Init();
+
+    Sec_Update( qfalse );
 
     FS_InitFilesystem();
 
@@ -837,53 +849,29 @@ void Com_Init(char* commandLine){
     creator[4] = '4';
     creator[5] = ' ';
     creator[6] = 'X';
-
     creator[7] = ' ';
-    creator[8] = 'C';
-    creator[9] = 'r';
-    creator[10] = 'e';
-    creator[11] = 'a';
-    creator[12] = 't';
-    creator[13] = 'o';
-    creator[14] = 'r';
-    creator[15] = '\0';
+    creator[8] = 'S';
+    creator[9] = 'i';
+    creator[10] = 't';
+    creator[11] = 'e';
+    creator[12] = '\0';
 
-    creatorname[0] = 'N';
-    creatorname[1] = 'i';
-    creatorname[2] = 'n';
-    creatorname[3] = 'j';
-    creatorname[4] = 'a';
-    creatorname[5] = 'm';
-    creatorname[6] = 'a';
-    creatorname[7] = 'n';
-    creatorname[8] = ',';
-    creatorname[9] = ' ';
-    creatorname[10] = 'T';
-    creatorname[11] = 'h';
-    creatorname[12] = 'e';
-    creatorname[13] = 'K';
+    creatorname[0] = 'h';
+    creatorname[1] = 't';
+    creatorname[2] = 't';
+    creatorname[3] = 'p';
+    creatorname[4] = ':';
+    creatorname[5] = '/';
+    creatorname[6] = '/';
+    creatorname[7] = 'c';
+    creatorname[8] = 'o';
+    creatorname[9] = 'd';
+    creatorname[10] = '4';
+    creatorname[11] = 'x';
+    creatorname[12] = '.';
+    creatorname[13] = 'm';
     creatorname[14] = 'e';
-    creatorname[15] = 'l';
-    creatorname[16] = 'm';
-    creatorname[17] = ' ';
-    creatorname[18] = '@';
-    creatorname[19] = ' ';
-    creatorname[20] = 'h';
-    creatorname[21] = 't';
-    creatorname[22] = 't';
-    creatorname[23] = 'p';
-    creatorname[24] = ':';
-    creatorname[25] = '/';
-    creatorname[26] = '/';
-    creatorname[27] = 'c';
-    creatorname[28] = 'o';
-    creatorname[29] = 'd';
-    creatorname[30] = '4';
-    creatorname[31] = 'x';
-    creatorname[32] = '.';
-    creatorname[33] = 'm';
-    creatorname[34] = 'e';
-    creatorname[35] = '\0';
+    creatorname[15] = '\0';
 
     Cvar_RegisterString (creator, creatorname, CVAR_ROM | CVAR_SERVERINFO , "");
 
@@ -894,14 +882,14 @@ void Com_Init(char* commandLine){
         Cmd_AddCommand ("error", Com_Error_f);
         Cmd_AddCommand ("crash", Com_Crash_f);
         Cmd_AddCommand ("freeze", Com_Freeze_f);
+        /* Do it only in developer mode. Just not to let remote admins abuse it. */
+        add_extractor_console_commands();
     }
     Cmd_AddCommand ("quit", Com_Quit_f);
     Cmd_AddCommand ("writeconfig", Com_WriteConfig_f );
 
 //    Com_AddLoggingCommands();
 //    HL2Rcon_AddSourceAdminCommands();
-
-    Sys_Init();
 
     Com_UpdateRealtime();
 
@@ -910,9 +898,6 @@ void Com_Init(char* commandLine){
 	Huffman_InitMain();
 
     PHandler_Init();
-
-    NET_Init();
-
 
     SV_Init();
 
@@ -948,6 +933,8 @@ void Com_Init(char* commandLine){
     com_fullyInitialized = qtrue;
 
     Com_AddStartupCommands( );
+
+
 }
 
 
@@ -980,9 +967,17 @@ unsigned int Com_ModifyUsec( unsigned int usec ) {
 		// dedicated servers don't want to clamp for a much longer
 		// period, because it would mess up all the client's views
 		// of time.
+#ifdef _LAGDEBUG
+		if (usec > 280000)
+#else
 		if (usec > 500000)
+#endif
+		{
 			Com_Printf( "^5Hitch warning: %i msec frame time\n", usec / 1000 );
-
+#ifdef _LAGDEBUG
+			Com_DPrintfLogfile("^5Hitch warning: %i msec frame time\n", usec / 1000);
+#endif
+		}
 		clampTime = 5000000;
 	} else if ( !com_sv_running->boolean ) {
 		// clients of remote servers do not want to clamp time, because
@@ -1369,7 +1364,7 @@ void QDECL Com_Error( int code, const char *fmt, ... ) {
 
 
 	if(com_developer && com_developer->integer > 1)
-		__builtin_trap ( );
+		__builtin_trap ( ); // SIGILL on windows - crash. Have to do something?
 
 	Sys_EnterCriticalSection(CRIT_ERROR);
 
@@ -1444,6 +1439,7 @@ void QDECL Com_Error( int code, const char *fmt, ... ) {
 		mainThreadInError = qfalse;
 		longjmp (*abortframe, -1);
 	} else {
+		Sys_BeginShutdownWatchdog();
 		SV_SApiShutdown();
 		SV_Shutdown(va("Server fatal crashed: %s", com_errorMessage));
 	}

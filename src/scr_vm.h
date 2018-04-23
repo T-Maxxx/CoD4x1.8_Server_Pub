@@ -27,7 +27,8 @@
 #define SCRSTRUCT_ADDR 0x895bf08
 #define STRINGINDEX_ADDR 0x836fe20
 #define stringIndex (*((stringIndex_t*)(STRINGINDEX_ADDR)))
-#define scrVarGlob (*((VariableValueInternal_t*)( 0x8a64e80 )))
+#define scrVarGlob (((VariableValueInternal*)( 0x8a64e80 )))
+#define scrVarGlob_high (((VariableValueInternal*)( 0x8a64e80 + 16 * 32770 )))
 #define scrVarPub (*((scrVarPub_t*)( 0x8be4e80 )))
 #define scrVmPub (*((scrVmPub_t*)( 0x8c06320 )))
 #define g_script_error_level *(int*)(0x8c0631c)
@@ -261,17 +262,36 @@ typedef enum{
 
 extern int script_CallBacks_new[8];
 
-typedef int fieldtype_t;
-
-typedef struct
+typedef enum fieldtype_e
 {
-    char* name;
-    int val1;
-    fieldtype_t type;
-    void (*setfun)();
-    void (*getfun)();
+    F_INT = 0x0,
+    F_FLOAT = 0x1,
+    F_LSTRING = 0x2,
+    F_STRING = 0x3,
+    F_VECTOR = 0x4,
+    F_ENTITY = 0x5,
+    F_VECTORHACK = 0x6,
+    F_OBJECT = 0x7,
+    F_UNKNOWN = 0x8,
+	F_MODEL = 0x9
+} fieldtype_t;
 
+typedef struct client_fields_s
+{
+    const char *name;
+    int ofs;
+    fieldtype_t type;
+    void (__cdecl *setter)(gclient_t *, struct client_fields_s *);
+    void (__cdecl *getter)(gclient_t *);
 }client_fields_t;
+
+typedef struct ent_field_s
+{
+  const char *name;
+  int ofs;
+  fieldtype_t type;
+  void (__cdecl *callback)(gentity_t *, int);
+} ent_field_t;
 
 typedef enum
 {
@@ -314,15 +334,50 @@ union VariableUnion
 };
 
 #pragma pack(push, 1)
-typedef struct
+/* 7512 */
+union ObjectInfo_u
 {
-  unsigned short pathA;
-  unsigned short next;
-  union VariableUnion value;
+  uint16_t size;
+  uint16_t entnum;
+  uint16_t nextEntId;
+  uint16_t self;
+};
+
+
+/* 7513 */
+struct ObjectInfo
+{
+  uint16_t refCount;
+  union ObjectInfo_u u;
+};
+
+/* 7514 */
+union VariableValueInternal_u
+{
+  uint16_t next;
+  union VariableUnion u;
+  struct ObjectInfo o;
+};
+
+/* 7515 */
+union VariableValueInternal_w
+{
+  unsigned int status;
   unsigned int type;
-  unsigned short pathB;
-  unsigned short prev;
-}VariableValueUnit_t;
+  unsigned int name;
+  unsigned int classnum;
+  unsigned int notifyName;
+  unsigned int waitTime;
+  unsigned int parentLocalId;
+};
+
+/* 7516 */
+union VariableValueInternal_v
+{
+  uint16_t next;
+  uint16_t index;
+};
+
 
 typedef struct
 {
@@ -330,13 +385,29 @@ typedef struct
   int type;
 }VariableValue;
 
-typedef struct
+/* 7510 */
+union Variable_u
 {
-  VariableValueUnit_t header;
-  VariableValueUnit_t variables[32768];
-  VariableValueUnit_t header2;
-  VariableValueUnit_t variables2[32768];
-}VariableValueInternal_t;
+  uint16_t prev;
+  uint16_t prevSibling;
+};
+
+/* 7511 */
+struct Variable
+{
+  uint16_t id;
+  union Variable_u u;
+};
+
+/* 7517 */
+typedef struct 
+{
+  struct Variable hash;
+  union VariableValueInternal_u u;
+  union VariableValueInternal_w w;
+  union VariableValueInternal_v v;
+  uint16_t nextSibling;
+}VariableValueInternal;
 
 
 typedef struct
@@ -425,12 +496,32 @@ unsigned int __cdecl Scr_GetType( unsigned int );
 unsigned int __cdecl Scr_GetPointerType( unsigned int );
 void __cdecl Scr_GetVector( unsigned int, float* );
 unsigned int __cdecl Scr_GetObject( unsigned int );
+
 int Scr_GetFunc(unsigned int paramnum);
 extern char* (__cdecl *Scr_GetLocalizedString)(unsigned int arg);
+
+/* Scr_Error
+ *
+ * Throws script runtime error with 'string' description.
+ * Asterisk points to function name.
+ */
 void __cdecl Scr_Error( const char *string);
 void __cdecl Scr_SetLoading( qboolean );
-void __cdecl Scr_ParamError( int, const char *string);
+
+/* Scr_ParamError
+ *
+ * Throws script runtime error with 'string' description.
+ * Asterisk points to 'paramNum' function parameter.
+ */
+void __cdecl Scr_ParamError( int paramNum, const char *string);
+
+/* Scr_ObjectError
+ *
+ * Throws script runtime error with 'string' description.
+ * Asterisk points to function caller.
+ */
 void __cdecl Scr_ObjectError( const char *string);
+
 void __cdecl Scr_AddInt(int value);
 void __cdecl Scr_AddFloat(float);
 void __cdecl Scr_AddBool(qboolean);
@@ -440,7 +531,7 @@ void __cdecl Scr_AddUndefined(void);
 void __cdecl Scr_AddVector( vec3_t vec );
 void __cdecl Scr_AddArray( void );
 void __cdecl Scr_MakeArray( void );
-void __cdecl Scr_MakeArrayKey( int strIdx );
+void __cdecl Scr_AddArrayKey( int strIdx );
 void __cdecl Scr_Notify( gentity_t*, unsigned short, unsigned int);
 void __cdecl Scr_NotifyNum( int, unsigned int, unsigned int, unsigned int);
 /*Not working :(  */
@@ -464,7 +555,7 @@ void* __cdecl Scr_AddSourceBuffer( const char*, const char*, const char*, byte )
 void __cdecl Scr_InitAllocNode( void );
 void __cdecl Scr_BeginLoadScripts( void );
 void __cdecl Scr_SetClassMap( unsigned int );
-void __cdecl Scr_AddFields( unsigned int, const char*, unsigned int );
+#define Scr_AddClassField ((void (__cdecl *)(unsigned int classnum, const char* name, unsigned short int offset))0x081535BA)
 void __cdecl Scr_SetGenericField( void*, fieldtype_t, int );
 void __cdecl Scr_GetGenericField( void*, fieldtype_t, int );
 void __cdecl Scr_SetString(unsigned short *strindexptr, unsigned const stringindex);
@@ -473,10 +564,6 @@ void Scr_InitSystem();
 int GetArraySize(int);
 void RemoveRefToValue(scriptVarType_t type, union VariableUnion val);
 
-/*
-void __cdecl GScr_AddFieldsForEntity( void );
-tGScr_AddFieldsForEntity GScr_AddFieldsForEntity = (tGScr_AddFieldsForEntity(0x80c7808);
-*/
 void __cdecl GScr_AddFieldsForHudElems( void );
 void __cdecl GScr_AddFieldsForRadiant( void );
 void __cdecl Scr_AddHudElem( game_hudelem_t* );
@@ -492,6 +579,7 @@ unsigned int Scr_LoadScript(const char* scriptname, PrecacheEntry *precache, int
 qboolean Scr_ExecuteMasterResponse(char* s);
 void Scr_AddStockFunctions();
 void Scr_AddStockMethods();
+void Scr_ScriptPreCompile( void *scr_buffer_handle, char *filepath );
 
 qboolean Scr_AddFunction( const char *cmd_name, xfunction_t function, qboolean developer);
 qboolean Scr_RemoveFunction( const char *cmd_name );
@@ -501,6 +589,7 @@ qboolean Scr_AddMethod( const char *cmd_name, xfunction_t function, qboolean dev
 qboolean Scr_RemoveMethod( const char *cmd_name );
 void Scr_ClearMethods( void );
 __cdecl void* Scr_GetMethod( const char** v_functionName, qboolean* v_developer );
+qboolean Scr_IsSyscallDefined( const char *name );
 void __regparm3 VM_Notify(int, int, VariableValue* val);
 int __cdecl FindEntityId(int, int);
 
@@ -548,5 +637,8 @@ gentity_t* VM_GetGEntityForNum(scr_entref_t num);
 gclient_t* VM_GetGClientForEntity(gentity_t* ent);
 gclient_t* VM_GetGClientForEntityNumber(scr_entref_t num);
 client_t* VM_GetClientForEntityNumber(scr_entref_t num); // Mainly for pressed buttons detection.
+
+// Returns pointer to new 'fields_1' array. To be used in patching purposes.
+ent_field_t* __internalGet_fields_1();
 
 #endif

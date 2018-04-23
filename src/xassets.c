@@ -84,7 +84,7 @@ void R_Init(){
 #define MAX_XMODELS 2000
 #define MAX_GFXIMAGE 3800
 #define MAX_WEAPON 196
-#define MAX_FX 680
+//#define MAX_FX 680
 
 typedef enum{
         XModelPieces,
@@ -94,7 +94,7 @@ typedef enum{
         Material,
         TechinqueSet,		// techset
         GfxImage,		// image
-        snd_alias_list_t,	// sound
+        SoundAliasList,	// sound
         SndCurve,
         LoadedSound,
         Col_Map_sp,
@@ -231,7 +231,7 @@ void XAssetsInitStdCount()
 	XAssetStdCount[Material] = 2048;
 	XAssetStdCount[TechinqueSet] = 1024;
 	XAssetStdCount[GfxImage] = 2400;
-	XAssetStdCount[snd_alias_list_t] = 16000;
+	XAssetStdCount[SoundAliasList] = 16000;
 	XAssetStdCount[SndCurve] = 64;
 	XAssetStdCount[LoadedSound] = 1200;
 	XAssetStdCount[Col_Map_sp] = 1;
@@ -316,7 +316,7 @@ void DB_CustomAllocOnce(XAssetType_t type)
 	int typesize = DB_GetXAssetTypeSize(type);
 	void *alloc;
 
-	alloc = Z_Malloc(count * typesize);
+	alloc = Z_TagMalloc(count * typesize, TAG_XZONE);
 	if(alloc)
 	{
 		DB_XAssetPool[type] = alloc;
@@ -346,7 +346,7 @@ void DB_RelocateXAssetMem()
 		count = XAssetRequestedCount[i];
 		typesize = DB_GetXAssetTypeSize(i);
 
-		newmem = Z_Malloc(count * typesize);
+		newmem = Z_TagMalloc(count * typesize, TAG_XZONE);
 
 		if(newmem == NULL)
 		{
@@ -748,9 +748,6 @@ void DB_BuildOverallocatedXAssetList(char* configstring, int len)
 {
     int i;
     char cstring[64];
-    int countlist[NumXAssets];
-
-    DB_CountXAssets(countlist, sizeof(countlist), qtrue);
 
     configstring[0] = '\0';
 
@@ -761,17 +758,17 @@ void DB_BuildOverallocatedXAssetList(char* configstring, int len)
             continue;
         }
 
-        if(DB_GetXAssetStdCount(i) >= countlist[i])
+		if(DB_XAssetPoolSize[i] <= DB_GetXAssetStdCount(i))
         {
             continue;
         }
-
+/*
         if(countlist[i] < 1)
         {
             continue;
         }
-
-        Com_sprintf(cstring, sizeof(cstring), "%s=%d ", DB_GetXAssetTypeName[i], countlist[i]);
+*/
+        Com_sprintf(cstring, sizeof(cstring), "%s=%d ", DB_GetXAssetTypeName[i], DB_XAssetPoolSize[i]);
         Q_strcat(configstring, len, cstring);
     }
 

@@ -59,6 +59,7 @@ typedef enum
 	CRIT_PLUGIN = 18,
 	CRIT_HTTPS = 19,
 	CRIT_CVAR = 20,
+	CRIT_RESOLVE = 21,
 	CRIT_SIZE
 }crit_section_t;
 
@@ -72,8 +73,8 @@ void __cdecl Sys_ThreadMain( void );
 qboolean __cdecl Sys_IsMainThread( void );
 qboolean __cdecl Sys_IsDatabaseThread( void );
 void Com_InitThreadData(void);
-const void* __cdecl Sys_GetValue(int key);
-void __cdecl Sys_SetValue(int key, const void* value);
+void* __cdecl Sys_GetValue(int key);
+void __cdecl Sys_SetValue(int key, void* value);
 qboolean Sys_CreateNewThread(void* (*ThreadMain)(void*), threadid_t*, void*);
 qboolean Sys_ThreadisSame(threadid_t threadid);
 qboolean Sys_SetupThreadCallback(void* callbackMain,...);

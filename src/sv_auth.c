@@ -224,9 +224,10 @@ static void Auth_SetAdmin_f() {
     }
 
     name = SV_GetPlayerNameByHandle(Cmd_Argv(1));
-		steamid = SV_GetPlayerSteamIDByHandle(Cmd_Argv(1));
+	steamid = SV_GetPlayerSteamIDByHandle(Cmd_Argv(1));
 	if(steamid == 0)
 	{
+
 		Com_Printf("No such player with a valid SteamID found.\n");
 		return;
 	}
@@ -854,7 +855,7 @@ qboolean SV_RemoteCmdAddAdmin(int uid, char* guid, int power)
 		return qfalse;
 	}
 
-	admin = Z_Malloc(sizeof(adminPower_t));
+	admin = S_Malloc(sizeof(adminPower_t));
 
 	if(admin)
 	{

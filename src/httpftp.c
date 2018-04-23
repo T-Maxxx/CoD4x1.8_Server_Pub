@@ -75,17 +75,17 @@ static void FT_FreeRequest(ftRequest_t* request)
 	}
 	if(request->recvmsg.data != NULL)
 	{
-		Z_Free(request->recvmsg.data);
+		L_Free(request->recvmsg.data);
 		request->recvmsg.data = NULL;
 	}
 	if(request->sendmsg.data != NULL)
 	{
-		Z_Free(request->sendmsg.data);
+		L_Free(request->sendmsg.data);
 		request->sendmsg.data = NULL;
 	}
 	if(request->transfermsg.data != NULL)
 	{
-		Z_Free(request->transfermsg.data);
+		L_Free(request->transfermsg.data);
 		request->transfermsg.data = NULL;
 	}
 	if(request->socket >= 0)
@@ -98,7 +98,7 @@ static void FT_FreeRequest(ftRequest_t* request)
     NET_TcpCloseSocket(request->transfersocket);
 		request->transfersocket = -1;
 	}
-	Z_Free(request);
+	L_Free(request);
 }
 
 
@@ -116,7 +116,7 @@ static ftRequest_t* FT_CreateRequest(const char* address, const char* url)
 	size = sizeof(ftRequest_t);
 #endif
 
-	request = Z_Malloc(size);
+	request = L_Malloc(size);
 	if(request == NULL)
 		return NULL;
 
@@ -129,20 +129,10 @@ static ftRequest_t* FT_CreateRequest(const char* address, const char* url)
 	if(address != NULL)
 	{
 		Q_strncpyz(request->address, address, sizeof(request->address));
-		/* Open the connection */
-		request->socket = NET_TcpClientConnect(request->address);
-
-	  if(request->socket < 0)
-		{
-			request->socket = -1;
-			FT_FreeRequest(request);
-			return NULL;
-		}
-
 	}
 
 	/* For proper terminating of string data +1 */
-	buf = Z_Malloc(INITIAL_BUFFERLEN +1);
+	buf = L_Malloc(INITIAL_BUFFERLEN +1);
 	if( buf == NULL)
 	{
 		FT_FreeRequest(request);
@@ -150,7 +140,7 @@ static ftRequest_t* FT_CreateRequest(const char* address, const char* url)
 	}
 	MSG_Init(&request->recvmsg, buf, INITIAL_BUFFERLEN);
 
-	buf = Z_Malloc(INITIAL_BUFFERLEN);
+	buf = L_Malloc(INITIAL_BUFFERLEN);
 	if( buf == NULL)
 	{
 		FT_FreeRequest(request);
@@ -241,7 +231,7 @@ static void FT_AddData(ftRequest_t* request, void* data, int len)
 	{
 		newsize = request->sendmsg.cursize + len;
 
-		newbuf = Z_Malloc(newsize);
+		newbuf = L_Malloc(newsize);
 		if(newbuf == NULL)
 		{
 			MSG_WriteData(&request->sendmsg, data, len);
@@ -249,7 +239,7 @@ static void FT_AddData(ftRequest_t* request, void* data, int len)
 		}
 		Com_Memcpy(newbuf, request->sendmsg.data, request->sendmsg.cursize);
 
-		Z_Free(request->sendmsg.data);
+		L_Free(request->sendmsg.data);
 		request->sendmsg.data = newbuf;
 		request->sendmsg.maxsize = newsize;
 	}
@@ -295,7 +285,9 @@ static int FT_SendData(ftRequest_t* request)
     NET_TcpCloseSocket(request->socket);
     request->socket = -1;
 		return -1;
-  }else if(bytes == 0){
+    }
+    else if(bytes == 0)
+    {
 		return 0;
 	}
 
@@ -382,16 +374,16 @@ static int FT_ReceiveData(ftRequest_t* request)
 	if (newsize)
 	{
 		/* For proper terminating of string data +1 */
-		newbuf = Z_Malloc(newsize +1);
+		newbuf = L_Malloc(newsize +1);
 		if(newbuf == NULL)
 		{
-      NET_TcpCloseSocket(request->socket);
-      request->socket = -1;
-      return -2;
+			NET_TcpCloseSocket(request->socket);
+			request->socket = -1;
+			return -2;
 		}
 		Com_Memcpy(newbuf, request->recvmsg.data, request->recvmsg.cursize);
 
-		Z_Free(request->recvmsg.data);
+		L_Free(request->recvmsg.data);
 		request->recvmsg.data = newbuf;
 		request->recvmsg.maxsize = newsize;
 	}
@@ -576,11 +568,10 @@ qboolean HTTP_BuildNewRequest( ftRequest_t* request, const char* method, msg_t* 
 	if(msg != NULL)
 	{
 		Com_sprintf(extheaderfields, sizeof(extheaderfields), "Content-Length: %d\r\n", msg->cursize);
-		if(additionalheaderlines && additionalheaderlines[0])
-		{
-			Q_strcat(extheaderfields, sizeof(extheaderfields), additionalheaderlines);
-		}
-
+	}
+	if(additionalheaderlines && additionalheaderlines[0])
+	{
+		Q_strcat(extheaderfields, sizeof(extheaderfields), additionalheaderlines);
 	}
 	Com_sprintf(getbuffer, sizeof(getbuffer),
 				"%s %s HTTP/1.1\r\n"
@@ -723,67 +714,116 @@ int HTTP_SendReceiveData(ftRequest_t* request)
 	int status, i, flags;
 	qboolean gotheader, connectionClosed;
 	char stringlinebuf[MAX_STRING_CHARS];
+	
+	if(request->socketReady == qfalse)
+	{
+		if(request->remote.type == 0)
+		{	//Hostname is still not resolved 
+			/* Open the connection */
+			int res = NET_StringToAdr(request->address, &request->remote, NA_UNSPEC);
+			if(res <= 0){
+				Com_Printf("Unable to resolve hostname %s\n", request->address);
+				request->socket = -1;
+				return -1;
+			}
+			if(res > 0)
+			{
+				request->socket = NET_TcpClientConnectNonBlockingToAdr(&request->remote);
+
+				if(request->socket < 0)
+				{
+					request->socket = -1;
+					return -1;
+				}
+			}
+			return 0;
+		}
+
+
+		//Test if the socket is connected (3-way hanndshake completed)
+		status = NET_TcpIsSocketReady(request->socket);
+		if(status == 0)
+		{
+			if(request->startTime + HTTP_CONNECTTIMEOUT < Sys_Milliseconds())
+			{
+				return -1;
+			}
+			return 0;
+		}
+		if(status < 0)
+		{
+			return -1;
+		}
+		request->socketReady = qtrue;
+	}
+
 
 #ifndef NO_TLS
-  char errormsg[1024];
+	char errormsg[1024];
 
 	if(request->tls && request->tls->gothandshake == qfalse)
 	{
+		mbedtls_ssl_set_bio( &request->tls->ssl, (void*)request->socket, mbedtls_net_send, mbedtls_net_recv, NULL );
+
 		int ret = mbedtls_ssl_handshake( &request->tls->ssl );
 		if(ret != 0 )
 		{
-				if( ret != MBEDTLS_ERR_SSL_WANT_READ &&	ret != MBEDTLS_ERR_SSL_WANT_WRITE )
-				{
-            mbedtls_strerror(ret, errormsg, sizeof(errormsg));
-						Com_Printf( "HTTP_SendReceiveData: mbedtls_ssl_handshake returned %s\n", errormsg );
-						return -1;
-				}
-				return 0;
+			if( ret != MBEDTLS_ERR_SSL_WANT_READ &&	ret != MBEDTLS_ERR_SSL_WANT_WRITE )
+			{
+				mbedtls_strerror(ret, errormsg, sizeof(errormsg));
+				Com_Printf( "HTTP_SendReceiveData: mbedtls_ssl_handshake returned %s\n", errormsg );
+				return -1;
+			}
+			return 0;
 		}
 		request->tls->gothandshake = qtrue;
 
 		/* In real life, we probably want to bail out when ret != 0 */
 		if( ( flags = mbedtls_ssl_get_verify_result( &request->tls->ssl ) ) != 0 )
 		{
-				char vrfy_buf[512];
-				mbedtls_x509_crt_verify_info( vrfy_buf, sizeof( vrfy_buf ), "", flags );
-				Com_Printf( "The TLS host verification has failed\n%s\n", vrfy_buf);
-        return -1;
+			char vrfy_buf[512];
+			mbedtls_x509_crt_verify_info( vrfy_buf, sizeof( vrfy_buf ), "", flags );
+			Com_Printf( "The TLS host verification has failed\n%s\n", vrfy_buf);
+        	return -1;
 		}
-
 	}
 #endif
 
-	if (request->sendmsg.cursize > 0) {
+	if (request->sendmsg.cursize > 0) 
+	{
 		status = FT_SendData(request);
 
 		if(status < 0)
-    {
-//      Com_DPrintf("FT_SendData error\n");
-    	return -1;
+		{
+	//      Com_DPrintf("FT_SendData error\n");
+			return -1;
 		}
-    return 0;
+		
+		return 0;
 	}
 
 	status = FT_ReceiveData(request);
-  if(status == -2)
-  {
-//    Com_DPrintf("FT_ReceiveData error\n");
-    return -1; //bail out
-  }
+	if(status == -2)
+	{
+	//    Com_DPrintf("FT_ReceiveData error\n");
+		return -1; //bail out
+	}
 
-  if(status < 0)
+	if(status < 0)
 	{
 		connectionClosed = qtrue;
 	}else{
 		connectionClosed = qfalse;
 	}
 
-	if (status == -1 || status == 1) {
+	if (status == -1 || status == 1) 
+	{
 		if(request->chunkedEncoding && request->headerLength > 0)
 		{
 			return HTTP_ProcessChunkedEncoding(request, connectionClosed);
-		}else if(status != 1){
+		}
+		else if(status != 1)
+		{
 			return status;
 		}
 	}
@@ -791,7 +831,7 @@ int HTTP_SendReceiveData(ftRequest_t* request)
 	{
 		gotheader = qfalse;
 
-    request->version = 0;
+    	request->version = 0;
 		request->code = 0;
 		request->status[0] = '\0';
 		request->contentLength = 0;
@@ -839,7 +879,9 @@ int HTTP_SendReceiveData(ftRequest_t* request)
 		if(line[i +9] != '\0')
 		{
 			Q_strncpyz(request->status, &line[i +9], sizeof(request->status));
-		}else{
+		}
+		else
+		{
 			Q_strncpyz(request->status, "N/A", sizeof(request->status));
 		}
 
@@ -861,12 +903,16 @@ int HTTP_SendReceiveData(ftRequest_t* request)
 					request->contentLength = 0;
 					return -1;
 				}
-			}else if(!Q_stricmpn("Transfer-Encoding:", line, 18)){
+			}
+			else if(!Q_stricmpn("Transfer-Encoding:", line, 18))
+			{
 				if(strstr(line, "chunked"))
 				{
 					request->chunkedEncoding = 1;
 				}
-			}else if(!Q_stricmpn("Location:", line, 9)){
+			}
+			else if(!Q_stricmpn("Location:", line, 9))
+			{
 				if(strlen(line +9) > 8)
 				{
 					/* We have to make it new... */
@@ -928,17 +974,22 @@ int HTTP_SendReceiveData(ftRequest_t* request)
 
 	}
 	/* Header was complete */
-	if( request->finallen > 0){
+	if( request->finallen > 0)
+	{
 		request->transferactive = qtrue;
 	}
 
 	request->extrecvmsg = &request->recvmsg;
 	if(request->contentLengthArrived)
 	{
-		if (request->totalreceivedbytes < request->finallen) {
-		/* Still needing bytes... */
+		if (request->totalreceivedbytes < request->finallen) 
+		{
+			/* Still needing bytes... */
+			//printf("received %d of %d bytes\n", request->totalreceivedbytes, request->finallen);
 			return 0;
-		}else{
+		}
+		else
+		{
 			/* Received full message */
 			return 1;
 		}
@@ -950,8 +1001,8 @@ int HTTP_SendReceiveData(ftRequest_t* request)
 	/* Received full message */
 	request->finallen = request->totalreceivedbytes;
 	request->contentLength = request->totalreceivedbytes - request->headerLength;
-	return 1;
 
+	return 1;
 }
 
 
@@ -1085,7 +1136,7 @@ static int HTTPS_SetupCAs()
   return 1;
 }
 
-
+//This does no longer setup BIO. BIO has to be set on a later stage
 static int HTTPS_Prepare( ftRequest_t* request, const char* commonname )
 {
 	int ret;
@@ -1144,7 +1195,6 @@ static int HTTPS_Prepare( ftRequest_t* request, const char* commonname )
   }
 
   mbedtls_ssl_conf_ca_chain( &request->tls->conf, &cacert, NULL );
-	mbedtls_ssl_set_bio( &request->tls->ssl, (void*)request->socket, mbedtls_net_send, mbedtls_net_recv, NULL );
 	return qtrue;
 
 failure:
@@ -1443,14 +1493,14 @@ static int FTP_ReceiveData(ftRequest_t* request)
 
 	if (newsize)
 	{
-		newbuf = Z_Malloc(newsize +1);
+		newbuf = L_Malloc(newsize +1);
 		if(newbuf == NULL)
 		{
 			return -1;
 		}
 		Com_Memcpy(newbuf, request->transfermsg.data, request->transfermsg.cursize);
 
-		Z_Free(request->transfermsg.data);
+		L_Free(request->transfermsg.data);
 		request->transfermsg.data = newbuf;
 		request->transfermsg.maxsize = newsize;
 	}
@@ -1485,6 +1535,42 @@ static int FTP_SendReceiveData(ftRequest_t* request)
 	byte* buf;
 	netadr_t pasvadr;
 	char stringlinebuf[MAX_STRING_CHARS];
+
+	if(request->socketReady == qfalse)
+	{
+		if(request->remote.type == 0)
+		{	//Hostname is still not resolved 
+			/* Open the connection */
+			int res = NET_StringToAdr(request->address, &request->remote, NA_UNSPEC);
+			if(res <= 0){
+				Com_Printf("Unable to resolve hostname %s\n", request->address);
+				request->socket = -1;
+				return -1;
+			}
+			if(res > 0)
+			{
+				request->socket = NET_TcpClientConnectNonBlockingToAdr(&request->remote);
+
+				if(request->socket < 0)
+				{
+					request->socket = -1;
+					return -1;
+				}
+			}
+			return 0;
+		}
+
+		status = NET_TcpIsSocketReady(request->socket);
+		if(status == 0)
+		{
+			return 0;
+		}
+		if(status < 0)
+		{
+			return -1;
+		}
+		request->socketReady = qtrue;
+	}
 
 	status = FT_ReceiveData(request);
 
@@ -1640,7 +1726,7 @@ static int FTP_SendReceiveData(ftRequest_t* request)
 					request->headerLength = 0;
 					request->transfertotalreceivedbytes = 0;
 
-					buf = Z_Malloc(INITIAL_BUFFERLEN +1);
+					buf = L_Malloc(INITIAL_BUFFERLEN +1);
 					if( buf == NULL)
 					{
 						Com_PrintWarning("FTP_SendReceiveData: Failed to allocate %d bytes for download file!\n", bytes);
@@ -1846,7 +1932,7 @@ static int FTP_SendReceiveData(ftRequest_t* request)
 			}
 			if(request->recvmsg.data != NULL)
 			{
-				Z_Free(request->recvmsg.data);
+				L_Free(request->recvmsg.data);
 				request->recvmsg.data = NULL;
 			}
 			if(request->transfermsg.data == NULL)
@@ -1876,7 +1962,7 @@ static int FTP_SendReceiveData(ftRequest_t* request)
  HTTP-Server
  =====================================================================
  */
-#ifndef CLIENT_WINDOW_TITLE
+#ifndef DEMOEXT
 
 int HTTPServer_ReadMessage(netadr_t* from, msg_t* msg, ftRequest_t* request)
 {
@@ -1903,7 +1989,7 @@ int HTTPServer_ReadMessage(netadr_t* from, msg_t* msg, ftRequest_t* request)
 			newsize = 2 * request->recvmsg.maxsize + msg->cursize;
 		}
 
-		newbuf = Z_Malloc(newsize);
+		newbuf = L_Malloc(newsize);
 		if(newbuf == NULL)
 		{
 			return -1;
@@ -1911,7 +1997,7 @@ int HTTPServer_ReadMessage(netadr_t* from, msg_t* msg, ftRequest_t* request)
 
 		Com_Memcpy(newbuf, request->recvmsg.data, request->recvmsg.cursize);
 
-		Z_Free(request->recvmsg.data);
+		L_Free(request->recvmsg.data);
 		request->recvmsg.data = newbuf;
 		request->recvmsg.maxsize = newsize;
 
@@ -2066,14 +2152,14 @@ void HTTPServer_BuildMessage( ftRequest_t* request, char* status, char* message,
 					  "\r\n", status, len, sessionkey);
 
 
-	newbuf = Z_Malloc(headerlen + len);
+	newbuf = L_Malloc(headerlen + len);
 	if(newbuf == NULL)
 	{
 		return;
 	}
 	if(request->sendmsg.data)
 	{
-		Z_Free(request->sendmsg.data);
+		L_Free(request->sendmsg.data);
 	}
 	request->sendmsg.data = newbuf;
 	request->sendmsg.maxsize = headerlen + len;
@@ -2121,7 +2207,7 @@ void HTTPServer_BuildResponse(ftRequest_t* request, char* sessionkey, httpPostVa
 	if(hasmessage)
 	{
 		HTTPServer_BuildMessage( request, "200 OK", (char*)msg.data, msg.cursize, sessionkey);
-		Z_Free(msg.data);
+		L_Free(msg.data);
 		return;
 	}
 	HTTPServer_BuildMessage( request, "403 FORBIDDEN", "Error: Forbidden", strlen("Error: Forbidden"), sessionkey);

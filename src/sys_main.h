@@ -47,13 +47,14 @@ __cdecl void QDECL Sys_Error( const char *fmt, ... );
 void Sys_SetBinaryPath(const char *path);
 const char *Sys_BinaryPath(void);
 const char *Sys_ExeFile(void);
+const char *Sys_ExeFileShort(void);
 void Sys_SetDefaultInstallPath(const char *path);
 char *Sys_DefaultInstallPath(void);
 const char *Sys_DefaultAppPath(void);
 //sys_unix.c
 qboolean Sys_RandomBytes( byte *string, int len );
 void Sys_DoStartProcess( char *cmdline );
-const char *Sys_Dirname( char *path );
+const char *Sys_Dirname(const char *path);
 char *Sys_Cwd( void );
 void Sys_InitCrashDumps();
 qboolean Sys_MemoryProtectWrite(void* startoffset, int len);
@@ -70,6 +71,7 @@ const char* Sys_GetUsername();
 void Sys_SetExitCmdline(const char *);
 void Sys_DoSignalAction(int signal, const char *);
 void Sys_SetExeFile(const char *);
+void Sys_SetExeFileShort(const char *);
 int Sys_Main(char* commandLine);
 const char* Sys_GetCommandline( void );
 void Sys_ReplaceProcess( char *cmdline );
@@ -86,6 +88,7 @@ void Sys_SleepSec(int seconds);
 int Sys_Backtrace(void** buffer, int size);
 void Sys_EventLoop(void);
 uint32_t Sys_MillisecondsRaw();
+void Sys_LoadLibraryError(char* errormessage, int maxlen);
 void* Sys_LoadLibrary(const char* dlfile);
 void Sys_CloseLibrary(void* dlhandle);
 void* Sys_GetProcedure(const char* procname);
@@ -100,6 +103,7 @@ void Sys_Restart(const char* reason);
 
 void Sys_BeginLoadThreadPriorities();
 void Sys_EndLoadThreadPriorities();
+void Sys_BeginShutdownWatchdog();
 #endif
 
 

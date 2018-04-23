@@ -90,7 +90,7 @@ qboolean	NET_SendPacket (netsrc_t sock, int length, const void *data, netadr_t *
 void		QDECL NET_OutOfBandPrint( netsrc_t net_socket, netadr_t *adr, const char *format, ...) __attribute__ ((format (printf, 3, 4)));
 void		QDECL NET_OutOfBandData( netsrc_t sock, netadr_t *adr, byte *format, int len );
 void		NET_RegisterDefaultCommunicationSocket(netadr_t *adr);
-netadr_t*	NET_GetDefaultCommunicationSocket();
+netadr_t*	NET_GetDefaultCommunicationSocket(netadrtype_t family);
 qboolean	NET_CompareAdr (netadr_t *a, netadr_t *b);
 qboolean	NET_CompareBaseAdrMask(netadr_t *a, netadr_t *b, int netmask);
 qboolean	NET_CompareBaseAdr (netadr_t *a, netadr_t *b);
@@ -110,9 +110,14 @@ void		NET_LeaveMulticast6(void);
 __optimize3 __regparm1 qboolean	NET_Sleep(unsigned int usec);
 void NET_Clear(void);
 const char*	NET_AdrMaskToString(netadr_t *adr);
+int NET_GetStaticIPv6Address(netadr_t* adr, unsigned int startindex);
+__cdecl const char	*NET_AdrToStringShortMT(netadr_t *a, char* buf, int len);
 
 qboolean	Sys_SendPacket( int length, const void *data, netadr_t *to );
 qboolean	Sys_StringToAdr( const char *s, netadr_t *a, netadrtype_t family );
+int 		Sys_StringToAdrNonBlock( const char *s, netadr_t *a, netadrtype_t family );
+int NET_StringToAdrNonBlocking( const char *s, netadr_t *a, netadrtype_t family );
+
 
 //Does NOT parse port numbers, only base addresses.
 qboolean	Sys_IsLANAddress (netadr_t *adr);
@@ -126,8 +131,10 @@ int NET_TcpClientConnect( const char *remoteAdr );
 int NET_TcpClientConnectToAdr( netadr_t* adr );
 int NET_TcpClientConnectFromAdrToAdr( netadr_t* destination, netadr_t* source );
 int NET_TcpClientConnectFromAdrToAdrSilent( netadr_t* destination, netadr_t* source );
+int NET_TcpClientConnectNonBlockingToAdr( netadr_t* adr );
 int NET_TcpClientGetData(int sock, void* buf, int buflen, char* errormsg, int maxerrorlen);
 void NET_TcpCloseSocket(int socket);
+int NET_TcpIsSocketReady(int socket); //return: 1 ready, 0 not ready, -1 select error, -2 other error
 const char* NET_GetHostAddress(char* adrstrbuf, int len);
 int NET_GetHostPort();
 netadr_t* NET_GetLocalAddressList(int* count);

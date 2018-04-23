@@ -1,57 +1,67 @@
 version: 1.0.{build}
-build_script:
+before_build:
 - ps: >-
+    choco install -y mingw -x86
+
+    ls "C:/tools"
+    
+    ls "C:/tools/mingw32"
+    
+    ls "C:/tools/mingw32/bin"
+    
+    Write-Host "    Downloading pexports..."
+    
+    curl -o "pexports.tar.xz" "https://github.com/callofduty4x/CoD4x_Server/raw/master/tools/pexports-0.47-mingw32-bin.tar.xz"
+    
+    Write-Host "    Installing pexports..."
+
+    7z x pexports.tar.xz | Out-Null
+
+    7z x pexports.tar | Out-Null
+
+    Write-Host "Setting up NASM:"
+    
+    Write-Host "    Downloading NASM..."
+    
     curl -o nasminst.exe http://libgd.blob.core.windows.net/nasm/nasm-2.07-installer.exe
-
+    
+    Write-Host "    Installing NASM..."
+    
     .\nasminst.exe /S
+    
+    Write-Host "Setting up environment variables."
+    
+    [Environment]::SetEnvironmentVariable("PATH",  "C:\tools\mingw32\bin;$pwd\bin;C:\Program Files (x86)\nasm;$($env:path)")
 
-    $env:path="C:\Program Files (x86)\nasm;$($env:path)"
-
-
-
-    curl -o xz.7z "http://tukaani.org/xz/xz-5.2.1-windows.7z"
-
-    curl -o pexports.tar.xz "http://vorboss.dl.sourceforge.net/project/mingw/MinGW/Extension/pexports/pexports-0.47/pexports-0.47-mingw32-bin.tar.xz"
-
-
-    7z x xz.7z
-
-    ls
-
-    ./bin_x86-64/xz.exe -d pexports.tar.xz
-
-
-    7z x pexports.tar
-
-    $env:path="$pwd\bin;$($env:path)"
-
-
-    ls
-
-
-    cd src/tomcrypt
-
-    ./compile_win32.cmd
-
-    cd ../mbedtls
-
-    ./build.cmd
-
-    cd ../..
-
-    ./build_updateable_win32_PE.cmd
+build_script:
+- cmd: >-
+    echo "Building server code:"
+    
+    mingw32-make.exe
+    
+    cd plugins && build_plugins.cmd && cd ..
+    
+    echo "Done."
 test_script:
 - ps: ./bin/cod4x18_dedrun.exe
+branches:
+  only:
+    - master    # Ignore all other branches.
+    - refactoring
 artifacts: 
   - path: bin\cod4x18_dedrun.exe
     name: cod4exe
+    
+  - path: plugins\**\*.dll
+    name: plugins
 deploy:
 - provider: GitHub
   auth_token:
     secure: Je7YohhSVawAyVkWQG3zyoppIB73CjJB99IlzzJzosFJ5NeBkYLUuA2SV52LTWXj
-  artifact: cod4exe
+  artifact: cod4exe, plugins
   draft: false
   prerelease: false
+  force_update: true
   on:
     branch: master                 # release from master branch only
     appveyor_repo_tag: true        # deploy on tag push only
